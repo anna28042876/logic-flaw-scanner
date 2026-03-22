@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+.env
+reports/
+logs/
+*.log
+.vscode/
+credentials.txt
