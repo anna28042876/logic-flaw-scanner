@@ -1,0 +1,27 @@
+# Scan Configuration Template
+target:
+  base_url: "http://localhost:3000"
+  name: "juice-shop"
+
+auth:
+  auth_type: bearer
+  accounts:
+    - email: "admin@juice-sh.op"
+      password: "CHANGE_ME_ADMIN"
+      role: admin
+    - email: "user_a@test.com"
+      password: "CHANGE_ME_USER_A"
+      role: user
+    - email: "user_b@test.com"
+      password: "CHANGE_ME_USER_B"
+      role: user
+
+scan:
+  rate_limit_delay: 0.5
+  max_depth: 3
+  timeout: 10
+
+output:
+  report_dir: "reports/"
+  log_dir: "logs/"
+  log_level: "INFO"
