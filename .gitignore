@@ -7,3 +7,4 @@ logs/
 *.log
 .vscode/
 credentials.txt
+pyrightconfig.json
