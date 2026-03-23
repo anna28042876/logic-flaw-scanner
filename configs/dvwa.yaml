@@ -1,0 +1,91 @@
+# `configs/dvwa.yaml`.
+# DVWA is the secondary test target, used to validate the scanner against a PHP app.
+# Also compares results against Juice Shop across different architectures. 
+# Pinned to v1.9 to keep the vulnerability baseline consistent. 
+target:
+  base_url: "http://localhost:8080"
+  # Excludes both the logout and setup page so that the scanner can't reset the database mid-scan.
+  excluded_paths:
+    - "^/logout.php"
+    - "^/setup.php"
+
+# DVWA runs on plain HTTP locally, so SSL verification isn't needed. 
+verify_ssl: false
+proxy: null
+# 0.05s should be fine for a localhost Docker container as it has no real network latency. 
+throttle_delay: 0.05
+
+scope:
+  # Everything runs on the same `localhost` Docker network and has no subdomains. 
+  include_subdomains: false
+  # DVWA's vulnerability pages, and core app reside under these two paths. 
+  allowed_paths:
+    - "/vulnerabilities/"
+    - "/dvwa/"
+  # Target disallowed Paths - possibly the most vulnerable. 
+  robots_txt: false
+
+login:
+  # DVWA uses a standard PHP login form, unlike Juice Shop's `REST API` endpoint. 
+  login_url: "http://localhost:8080/login.php"
+  login_method: POST
+  username_field: "username"
+  password_field: "password"
+  # DVWA responds with a `302 redirect` to `/index.php` upon success, not a `200`. 
+  success_indicator: "302"
+
+# DVWA uses `PHPSESSID` session cookies not `JWT` bearer tokens. 
+# `user_a` and `user_b` are created manually via a `MYSQL INSERT`.
+# The `admin` default password is intentionally weak, as this app is vulnerable by design. 
+credentials:
+  - username: "admin"
+    password: "password"
+    role: "admin"
+    auth_type: "form"
+
+  - username: "user_a"
+    password: "CHANGE_ME_USER_A"
+    role: "user_a"
+    auth_type: "form"
+
+  - username: "user_b"
+    password: "CHANGE_ME_USER_B"
+    role: "user_b"
+    auth_type: "form"
+
+crawl:
+  max_depth: 3
+  # Keeping `500` for consistency, though DVWA has far fewer pages than Juice Shop.  
+  max_pages: 500
+  max_crawl_time: 300
+  follow_external: false
+  # DVWA is `server-rendered PHP`, meaning the `SPA Crawler` won't find much.
+  # `SPA` has been left enabled either way to ensure nothing `JavaScript-rendered` is missed.
+  handle_spa: true
+
+rate_limit:
+  # Starting at 10 requests per-second and escalate automatically through the tiers.
+  requests_per_second: 10
+  total_requests: 100
+  # Headers are rotated to test whether DVWA's rate limiting checks the IP.
+  bypass_headers:
+    - "X-Forwarded-For"
+    - "X-Originating-IP"
+    - "X-Remote-IP"
+    - "X-Client-IP"
+    - "X-Real-IP"
+  # If there isn't 429 responses seen at 10 requests per second, then escalate automatically throughout the tiers. 
+  rate_limit_tiers:
+    - { rps: 10,  count: 100 }
+    - { rps: 25,  count: 150 }
+    - { rps: 50,  count: 200 }
+
+# DVWA has no multi-step purchase sequence, all workflow testing is done directly against Juice Shop.
+workflows: []
+
+# Both formats are generated. 
+# `JSON` for metric calculations.
+# `HTML` for the demonstration video.
+reporting:
+  output_dir: "reports/"
+  format: "both"

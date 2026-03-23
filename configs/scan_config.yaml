@@ -1,27 +1,118 @@
-# Scan Configuration Template
+# `configs/scan_config.yaml`.
+
+# Base configuration for the logic flaw scanner. 
+# Target-specific overrides live in `juiceshop.yaml` and `dvwa.yaml`.
+
 target:
+  # Root URL that all discovered paths are resolved against. 
   base_url: "http://localhost:3000"
-  name: "juice-shop"
+  
+  # Paths to skip when crawling - logout would invalidate active sessions mid-scan.
+  excluded_paths: []
 
-auth:
-  auth_type: bearer
-  accounts:
-    - email: "admin@juice-sh.op"
-      password: "CHANGE_ME_ADMIN"
-      role: admin
-    - email: "user_a@test.com"
-      password: "CHANGE_ME_USER_A"
-      role: user
-    - email: "user_b@test.com"
-      password: "CHANGE_ME_USER_B"
-      role: user
+# Disabled for the lab environment as Juice Shop and DVWA use `http` not `https`.
+verify_ssl: false
 
-scan:
-  rate_limit_delay: 0.5
+# Set to `http://127.0.0.1:8080` to route traffic through burp suite for inspection. 
+proxy: null
+
+# 0.05s (20 req/s) should be enough for localhost Docker targets.
+# Will increase to 0.1 or higher if scanning an external target. 
+throttle_delay: 0.05
+
+scope:
+  # Both targets run on `localhost`, so no subdomain scanning is needed. 
+  include_subdomains: false
+
+  # Left empty as target-specific paths are set in `juiceshop.yaml` and `dvwa.yaml`.
+  allowed_paths: []
+
+  # Disallowed paths in `robots.txt` are the most sensitive targets. 
+  robots_txt: false
+
+login:
+  # Juice Shop authenticates via its REST API, not a HTML form. 
+  login_url: "http://localhost:3000/rest/user/login"
+  login_method: POST
+  username_field: "email"
+  password_field: "password"
+  # 200 response indicates a successful login for this endpoint.
+  success_indicator: "200"
+
+# Three accounts needed, with all three using bearer auth - Juice Shop returning JWT on login.
+# `Admin` is for vertical escalation testing. 
+# `user_a` and `user_b` are for horizontal IDOR testing between accounts.
+credentials:
+  - username: "admin@juice-sh.op"
+    password: "CHANGE_ME_ADMIN"
+    role: "admin"
+    auth_type: "bearer"
+
+  - username: "user_a@test.com"
+    password: "CHANGE_ME_USER_A"
+    role: "user_a"
+    auth_type: "bearer"
+
+  - username: "user_b@test.com"
+    password: "CHANGE_ME_USER_B"
+    role: "user_b"
+    auth_type: "bearer"
+
+crawl:
+  # 3 levels is deep enough to reach all Juice Shop endpoints. 
   max_depth: 3
-  timeout: 10
+  # Raised from 200 - as previously mentioned, Juice Shop has 60+ endpoints and would hit the limit too early. 
+  max_pages: 500
+  # Hard limit at 5 minutes to prevent runaway crawls. 
+  max_crawl_time: 300
+  follow_external: false
+  # Juice Shop is a single-page Angular app, and therefore, SPA crawling is required. 
+  handle_spa: true
 
-output:
-  report_dir: "reports/"
-  log_dir: "logs/"
-  log_level: "INFO"
+rate_limit:
+  # Starting at 10 rps avoids Juice Shop degradation within the VM. 
+  # The tiered configuration below automatically escalates if no limiting is detected.
+  requests_per_second: 10
+  total_requests: 100
+  # IP spoofing headers are used when testing whether rate limiting can be bypassed.
+  bypass_headers:
+    - "X-Forwarded-For"
+    - "X-Originating-IP"
+    - "X-Remote-IP"
+    - "X-Client-IP"
+    - "X-Real-IP"
+  # Escalates through tiers if no 429 responses are seen at the lower rates. 
+  rate_limit_tiers:
+    - { rps: 10,  count: 100 }
+    - { rps: 25,  count: 150 }
+    - { rps: 50,  count: 200 }
+
+# The flow from add-to-basket to checkout is the primary workflow test case. 
+# The basket ID must be discovered via `/rest/basket` before this runs, which is handled as a pre-step by the `WorkflowRecorder`.
+workflows:
+  - name: "add_to_basket_and_checkout"
+    steps:
+      - name: "add_item_to_basket"
+        method: POST
+        path: "/api/BasketItems"
+        # {{pre.user_basket_id}} is substituted at runtime via the `WorkflowRecorder`.
+        body: '{"ProductId": 1, "BasketId": "{{pre.user_basket_id}}", "quantity": 1}'
+        expected_status: 200
+        extract:
+          - name: "basket_item_id"
+            source: "json"
+            path: "data.id"
+
+      - name: "checkout"
+        method: POST
+        path: "/rest/basket/{{pre.user_basket_id}}/checkout"
+        expected_status: 200
+        extract:
+          - name: "order_confirmation"
+            source: "json"
+            path: "orderConfirmation"
+
+reporting:
+  output_dir: "reports/"
+  # Both JSON and HTML formats are generated. JSON for metric analysis and HTML for the demonstration. 
+  format: "both"
