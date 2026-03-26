@@ -6,7 +6,6 @@ modules can access configuration values without knowing anything about the YAML 
 # Import statements.
 import yaml     # Third-party library for parsing YAML files.
 import os       # Checks whether the configuration file exists on disk.
-import sys      # Future use (e.g., `sys.exit` on fatal errors).
 
 # Loads the YAML config file and exposes every setting as a typed property with safe defaults.
 class ScanConfig:

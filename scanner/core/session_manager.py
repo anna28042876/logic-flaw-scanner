@@ -9,7 +9,6 @@ testing (especially IDOR), and therefore ensuring no cookies, headers, or tokens
 scanning. """
 
 import base64
-import json
 
 import requests
 from bs4 import BeautifulSoup
