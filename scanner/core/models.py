@@ -31,6 +31,9 @@ class Endpoint:
     # Helps modules decide how to process responses (HTML vs JSON).
     content_type: str = "text/html"
 
+    # Tracks which roles discovered this endpoint during crawling.
+    discovered_by_roles: list = field(default_factory=list)
+
     def to_dict(self) -> dict:
         # Converts the dataclass into a serialisable dictionary for reporting/output.
         return asdict(self)
