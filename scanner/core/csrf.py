@@ -16,7 +16,6 @@ from scanner.core.logger import get_logger
 
 logger = get_logger(__name__)
 
-
 class CSRFExtractor:
     """ Extracts CSRF tokens from HTML bodies, cookies, and response headers across Juice Shop, and DVWA."""
 
