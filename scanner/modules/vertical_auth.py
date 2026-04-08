@@ -6,6 +6,7 @@ user seession, and an unauthenticated session.  Findings are stored as `Vulnerab
 vertical privilege escalation, and unauthorised access.
 """
 
+import hashlib
 import re
 
 from scanner.core.http_client import HTTPClient
@@ -30,6 +31,8 @@ class VerticalAuthTester:
         self.session_manager = session_manager
         self.comparator = comparator
         self.findings = []
+        # Tracks the dispatched write request signatures, to prevent duplicate state-changing calls.
+        self._sent_write_requests = set()
         # Defines the regex patterns matching common admin route segments on Juice Shop and DVWA.
         self.admin_patterns = [
             r'/admin',
@@ -77,6 +80,18 @@ class VerticalAuthTester:
         method = endpoint.method.upper()
         logger.info("Testing vertical escalation on %s %s", method, url)
 
+        # Builds a unique signature, and skips the write request if it was already sent during this scan.
+        if method != 'GET':
+            request_signature = (method, url)
+            if request_signature in self._sent_write_requests:
+                logger.debug(
+                    "Skipping duplicate write request to %s %s, already sent this scan.",
+                    method,
+                    url,
+                )
+                return
+            self._sent_write_requests.add(request_signature)
+
         admin_kwargs = self.session_manager.get_session_kwargs(admin_role)
         # Dispatches the request to the admin session, to confirm the endpoint is accessible.
         try:
@@ -88,7 +103,7 @@ class VerticalAuthTester:
             logger.warning("Admin request to %s raised an exception: %s", url, exc)
             return
 
-        # Skips this endpoint if the admin session itself does not receive a 200 response.
+        # Skips this endpoint, if the admin session itself does not receive a 200 response.
         if response_admin.status_code != 200:
             logger.debug(
                 "Admin received %s on %s, skipping vertical escalation test.",
