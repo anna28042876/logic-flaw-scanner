@@ -1,0 +1,638 @@
+{#
+    `report.html`
+
+    Jinja2 HTML report template for the logic flaw vulnerability scanner.
+    Renders `ScanResult` metadata, `Vulnerability` findings, and evidence from
+    `EvidenceCollector` into a single self-contained page, with embedded CSS
+    and JavaScript. THere are no external dependencies, and all styles and scripts are inline.
+    Expected context variables: `scan_result`, `severity_counts`, `evidence_store`, `scanner_version`.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan Report — {{ scan_result.target_url }}</title>
+    <style>
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f0f2f5;
+            color: #1a1a2e;
+            line-height: 1.6;
+        }
+
+        /* Dark gradient header for the scanner name, and scan metadata */
+        .site-header {
+            background: linear-gradient(135deg, #0d1b2a 0%, #1b2838 60%, #0d1b2a 100%);
+            color: #e8f1fb;
+            padding: 2rem 2.5rem;
+            border-bottom: 3px solid #cc0000;
+        }
+
+        .site-header h1 {
+            font-size: 1.7rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            margin-bottom: 0.6rem;
+        }
+
+        .site-header .header-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            font-size: 0.875rem;
+            color: #a8c0d8;
+        }
+
+        /* Centre-max container for all the main report content */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        /* White card panel shared by every report section */
+        .card {
+            background: #ffffff;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            padding: 1.75rem 2rem;
+            margin-bottom: 1.75rem;
+        }
+
+        .card h2 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #0d1b2a;
+            border-left: 4px solid #1b2838;
+            padding-left: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+
+        /* Responsive grid for the executive summary key-value tiles */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+            gap: 1rem;
+        }
+
+        .summary-item {
+            background: #f7f9fc;
+            border-radius: 4px;
+            padding: 0.85rem 1rem;
+            border-left: 3px solid #4a9eca;
+        }
+
+        .summary-item .label {
+            display: block;
+            font-size: 0.68rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: #6b7a8d;
+            margin-bottom: 0.3rem;
+        }
+
+        .summary-item .value {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #0d1b2a;
+            word-break: break-all;
+        }
+
+        /* CSS-only horizontal bar chart rows, for severity counts */
+        .severity-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .bar-row {
+            display: grid;
+            grid-template-columns: 90px 1fr 48px;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .bar-label {
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .bar-track {
+            background: #eef0f3;
+            border-radius: 3px;
+            height: 24px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            width: 0;
+        }
+
+        .bar-count {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #4a5568;
+        }
+
+        /* Severity badge pill for each finding row */
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.55rem;
+            border-radius: 3px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #ffffff;
+        }
+
+        .badge-critical { background: #cc0000; }
+        .badge-high     { background: #ff6600; }
+        .badge-medium   { background: #ffcc00; color: #333333; }
+        .badge-low      { background: #3366cc; }
+        .badge-info     { background: #999999; }
+
+        /* Full-width findings table, with a dark header row */
+        .findings-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+
+        .findings-table thead tr {
+            background: #0d1b2a;
+            color: #e8f1fb;
+        }
+
+        .findings-table thead th {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .findings-table tbody tr {
+            border-bottom: 1px solid #edf0f4;
+        }
+
+        .findings-table tbody tr:hover {
+            background: #f7f9fc;
+        }
+
+        .findings-table td {
+            padding: 0.7rem 1rem;
+            vertical-align: top;
+        }
+
+        .findings-table td.endpoint {
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            color: #1a3a5c;
+            word-break: break-all;
+        }
+
+        .findings-table td.method {
+            font-family: 'Courier New', monospace;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .findings-table td.description {
+            color: #3a4a5c;
+        }
+
+        /* Toggle button for revealing the evidence panel of a finding */
+        .btn-evidence {
+            background: none;
+            border: 1px solid #c0cad6;
+            border-radius: 3px;
+            padding: 0.25rem 0.65rem;
+            font-size: 0.75rem;
+            color: #4a6c8c;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-evidence:hover {
+            background: #eef3f9;
+            border-color: #4a9eca;
+            color: #1a3a5c;
+        }
+
+        /* Evidence panel rows are hidden by default, until purposefully toggled open */
+        .evidence-row { display: none; }
+        .evidence-row.open { display: table-row; }
+
+        .evidence-panel {
+            background: #f0f4f9;
+            border: 1px solid #d0dae6;
+            border-radius: 4px;
+            padding: 1.25rem 1.5rem;
+            margin: 0.25rem 0;
+        }
+
+        /* Two-column grid for baseline, and test request, and response blocks */
+        .evidence-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        @media (max-width: 900px) {
+            .evidence-grid { grid-template-columns: 1fr; }
+        }
+
+        .evidence-block h4 {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #4a6c8c;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Dark code blocks for request, response, and difference content */
+        .evidence-block pre {
+            background: #1a1a2e;
+            color: #c8d8e8;
+            font-family: 'Courier New', monospace;
+            font-size: 0.78rem;
+            padding: 0.85rem 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .diff-block h4 {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #7a4a9c;
+            margin-bottom: 0.5rem;
+            margin-top: 0.75rem;
+        }
+
+        .diff-block pre {
+            background: #1e1430;
+            color: #d8c8f0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.78rem;
+            padding: 0.85rem 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .evidence-meta {
+            margin-top: 0.75rem;
+            font-size: 0.73rem;
+            color: #6b8aaa;
+        }
+
+        .evidence-meta code {
+            background: #dce6f0;
+            border-radius: 2px;
+            padding: 0.1rem 0.3rem;
+            font-size: 0.72rem;
+            color: #1a3a5c;
+        }
+
+        /* Token colour classes applied by the client-side JSON syntax highlighter */
+        .json-key  { color: #79c0ff; }
+        .json-str  { color: #a5d6a7; }
+        .json-num  { color: #ffcc66; }
+        .json-bool { color: #ff9d6f; }
+        .json-null { color: #f97583; }
+
+        .no-findings {
+            text-align: center;
+            padding: 2.5rem;
+            color: #6b7a8d;
+            font-style: italic;
+        }
+
+        /* Dark footer containing scanner version, scan ID, and the disclaimer */
+        .site-footer {
+            background: #0d1b2a;
+            color: #6b8aaa;
+            text-align: center;
+            padding: 1.25rem 2rem;
+            font-size: 0.78rem;
+            line-height: 1.8;
+        }
+
+        .site-footer strong { color: #a8c0d8; }
+
+        .site-footer .disclaimer {
+            font-style: italic;
+            color: #4a5c6e;
+            margin-top: 0.35rem;
+        }
+
+    </style>
+</head>
+<body>
+
+    <header class="site-header">
+        <h1>Logic Flaw Vulnerability Scanner</h1>
+        <div class="header-meta">
+            <span>Target: <strong>{{ scan_result.target_url }}</strong></span>
+            <span>Scan Date: {{ scan_result.scan_start.strftime('%d %B %Y') }}</span>
+            <span>Start Time: {{ scan_result.scan_start.strftime('%H:%M:%S') }}</span>
+            <span>Duration: {{ scan_result.duration | round(1) }}s</span>
+        </div>
+    </header>
+
+    <main class="container">
+
+        <section class="card" id="executive-summary">
+            <h2>Executive Summary</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <span class="label">Target URL</span>
+                    <span class="value">{{ scan_result.target_url }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="label">Scan Started</span>
+                    <span class="value">{{ scan_result.scan_start.strftime('%d %b %Y %H:%M:%S') }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="label">Scan Completed</span>
+                    <span class="value">{{ scan_result.scan_end.strftime('%d %b %Y %H:%M:%S') }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="label">Duration</span>
+                    <span class="value">{{ scan_result.duration | round(1) }} seconds</span>
+                </div>
+                <div class="summary-item">
+                    <span class="label">Endpoints Discovered</span>
+                    <span class="value">{{ scan_result.total_endpoints }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="label">Parameters Found</span>
+                    <span class="value">{{ scan_result.total_parameters }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="label">Total HTTP Requests</span>
+                    <span class="value">{{ scan_result.total_requests }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="label">Total Findings</span>
+                    <span class="value">{{ scan_result.vulnerabilities | length }}</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="card" id="severity-breakdown">
+            <h2>Severity Breakdown</h2>
+            <div class="severity-chart">
+                {% set total_findings = severity_counts.values() | sum %}
+                {# Renders one bar row per-severity level, storing colour, and percentages as data attributes applied by `applyBarStyles`. #}
+                {% for sev, colour in [
+                    ('Critical', '#CC0000'),
+                    ('High',     '#FF6600'),
+                    ('Medium',   '#FFCC00'),
+                    ('Low',      '#3366CC'),
+                    ('Info',     '#999999')
+                ] %}
+                {% set count = severity_counts.get(sev, 0) %}
+                {% set pct   = ((count / total_findings) * 100) | round(1) if total_findings > 0 else 0 %}
+                <div class="bar-row"
+                     data-colour="{{ colour }}"
+                     data-pct="{{ pct }}">
+                    <span class="bar-label">{{ sev }}</span>
+                    <div class="bar-track">
+                        <div class="bar-fill"></div>
+                    </div>
+                    <span class="bar-count">{{ count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="card" id="findings">
+            <h2>Findings ({{ scan_result.vulnerabilities | length }})</h2>
+            {# Renders the full findings table when at least one `Vulnerability` is present in `scan_result`. #}
+            {% if scan_result.vulnerabilities %}
+            <table class="findings-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Severity</th>
+                        <th>Type</th>
+                        <th>Endpoint</th>
+                        <th>Method</th>
+                        <th>Description</th>
+                        <th>Evidence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {# Renders one data row, and one collapsible evidence row, per `Vulnerability` in `scan_result.vulnerabilities`. #}
+                    {% for vuln in scan_result.vulnerabilities %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>
+                            <span class="badge badge-{{ vuln.severity | lower }}">
+                                {{ vuln.severity }}
+                            </span>
+                        </td>
+                        <td>{{ vuln.vuln_type }}</td>
+                        <td class="endpoint">{{ vuln.endpoint }}</td>
+                        <td class="method">{{ vuln.method }}</td>
+                        <td class="description">{{ vuln.description }}</td>
+                        <td>
+                            {# Shows a toggle button only when an evidence record already exists in `evidence_store`, for this `Vulnerability`. #}
+                            {% if vuln.evidence_id and vuln.evidence_id in evidence_store %}
+                            <button
+                                class="btn-evidence"
+                                onclick="toggleEvidence('ev-{{ loop.index }}')"
+                                id="btn-ev-{{ loop.index }}"
+                                aria-expanded="false"
+                            >
+                                Show Evidence
+                            </button>
+                            {% else %}
+                            <span style="font-size: 0.78rem; color: #aaaaaa;">None</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {# Renders the hidden evidence panel row for this `Vulnerability`, which is only revealed when the toggle button is clicked. #}
+                    {% if vuln.evidence_id and vuln.evidence_id in evidence_store %}
+                    {% set ev = evidence_store[vuln.evidence_id] %}
+                    <tr class="evidence-row" id="ev-{{ loop.index }}">
+                        <td colspan="7">
+                            <div class="evidence-panel">
+                                <div class="evidence-grid">
+                                    <div class="evidence-block">
+                                        <h4>Baseline Request</h4>
+                                        <pre class="maybe-json">{{ ev.baseline_request | tojson(indent=2) }}</pre>
+                                    </div>
+                                    <div class="evidence-block">
+                                        <h4>Test Request</h4>
+                                        <pre class="maybe-json">{{ ev.test_request | tojson(indent=2) }}</pre>
+                                    </div>
+                                    <div class="evidence-block">
+                                        <h4>Baseline Response</h4>
+                                        <pre class="maybe-json">{{ ev.baseline_response | tojson(indent=2) }}</pre>
+                                    </div>
+                                    <div class="evidence-block">
+                                        <h4>Test Response</h4>
+                                        <pre class="maybe-json">{{ ev.test_response | tojson(indent=2) }}</pre>
+                                    </div>
+                                </div>
+                                {# Shows the difference summary block, only when `ev.difference_summary` is non-empty. #}
+                                {% if ev.difference_summary %}
+                                <div class="diff-block">
+                                    <h4>Difference Summary</h4>
+                                    <pre>{{ ev.difference_summary }}</pre>
+                                </div>
+                                {% endif %}
+                                <div class="evidence-meta">
+                                    Evidence ID: <code>{{ ev.id }}</code>
+                                    &nbsp;|&nbsp;
+                                    Recorded: {{ ev.timestamp }}
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="no-findings">No vulnerabilities were detected during this scan.</p>
+            {% endif %}
+        </section>
+
+    </main>
+
+    <footer class="site-footer">
+        <div>
+            <strong>Logic Flaw Vulnerability Scanner</strong>
+            &nbsp;v{{ scanner_version }}
+            &nbsp;&nbsp;|&nbsp;&nbsp;
+            Scan ID: <code style="background: #1b2838; padding: 0.1rem 0.4rem; border-radius: 2px; color: #a8c0d8;">{{ scan_result.scan_id }}</code>
+        </div>
+        <div class="disclaimer">
+            This report is generated automatically and may contain false positives.
+            All findings must be manually verified before any remediation action is taken.
+            This tool is intended for use on authorised targets only.
+        </div>
+    </footer>
+
+    <script>
+        /**
+         * Toggles the visibility of the evidence panel row, as identified by `rowId`.
+         * Updates the corresponding button label, and aria-expanded attributes to reflect
+         * the open, or closed state.
+         */
+        function toggleEvidence(rowId) {
+            var row = document.getElementById(rowId);
+            var btn = document.getElementById('btn-' + rowId);
+            if (!row || !btn) {
+                return;
+            }
+            var isOpen = row.classList.contains('open');
+            row.classList.toggle('open', !isOpen);
+            btn.textContent = isOpen ? 'Show Evidence' : 'Hide Evidence';
+            btn.setAttribute('aria-expanded', String(!isOpen));
+        }
+
+        /**
+         * Reads `data-colour`, and `data-pct`, from each `.bar-row` element, and applies
+         * them as inline styles to the label text colour, and the fill bar width.
+         */
+        function applyBarStyles() {
+            var rows = document.querySelectorAll('.bar-row[data-colour]');
+            // Iterates through every severity bar row, aapplying its colour, and percentage width.
+            rows.forEach(function (row) {
+                var colour = row.getAttribute('data-colour');
+                var pct    = row.getAttribute('data-pct');
+                var label  = row.querySelector('.bar-label');
+                var fill   = row.querySelector('.bar-fill');
+                if (label) {
+                    label.style.color = colour;
+                }
+                if (fill) {
+                    fill.style.width      = pct + '%';
+                    fill.style.background = colour;
+                }
+            });
+        }
+
+        /**
+         * Applies syntax highlighting to all `pre.maybe-json` elements on the page.
+         * Parses each element's text content as JSON, and replaces inner HTML with
+         * colour-coded spans - via `syntaxHighlight`. Falls back to plain text on error.
+         */
+        function highlightAllJson() {
+            var blocks = document.querySelectorAll('pre.maybe-json');
+            // Iterates through every `pre.maybe-json` block, and attempts JSON parsing for syntax highlighting.
+            blocks.forEach(function (block) {
+                var raw = block.textContent;
+                try {
+                    var parsed = JSON.parse(raw);
+                    block.innerHTML = syntaxHighlight(JSON.stringify(parsed, null, 2));
+                } catch (e) {
+                    // Leaves the plain text unchanged, when the block content is not valid JSON.
+                }
+            });
+        }
+
+        /**
+         * Converts a JSON string into HTML markup with colour-coded token spans.
+         * Handles JSON object keys, string values, numbers, booleans, and null values.
+         * Also escapes HTML special characters before applying the span replacement.
+         */
+        function syntaxHighlight(json) {
+            json = json
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            return json.replace(
+                /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+                function (match) {
+                    var cls = 'json-num';
+                    // Assigns the correct CSS class based on whether the token is a key, string, boolean, or null.
+                    if (/^"/.test(match)) {
+                        cls = /:$/.test(match) ? 'json-key' : 'json-str';
+                    } else if (/true|false/.test(match)) {
+                        cls = 'json-bool';
+                    } else if (/null/.test(match)) {
+                        cls = 'json-null';
+                    }
+                    return '<span class="' + cls + '">' + match + '</span>';
+                }
+            );
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            applyBarStyles();
+            highlightAllJson();
+        });
+    </script>
+
+</body>
+</html>
