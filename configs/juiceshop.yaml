@@ -1,40 +1,43 @@
 # `configs/juiceshop.yaml`
-# Juice Shop is the primary test target for IDOR, workflow bypass, and rate-limit testing.
-# Pinned to v17.1.1 so that the vulnerability ground truth remains consistent amongst all runs.
+# Juice Shop specific configuration for the logic flaw scanner.
+# Pinned to v17.1.1 running on port 3000 inside Docker, on the Kali VM, so that the
+# ground truth remains consistent across all scan runs.
+
 target:
+  # Root URL thats resolved against all crawled and probed paths, during the scan.
   base_url: "http://localhost:3000"
-  # Excluding the logout so that the scanner doesnt involuntarily invalidate its own session mid-scan. 
+  # Excludes the logout endpoint so that the scanner cannot invalidate its own sessions mid-scan.
   excluded_paths:
     - "^/rest/user/logout"
 
-# Juice Shop runs over plain HTTP locally so that SSL verification isn't needed.
+# Juice Shop runs over plain HTTP on localhost, so SSL verification unnecessary.
 verify_ssl: false
 proxy: null
-# 0.05s for localhost docker container - no real network latency.
+# 0.05s throttle for a localhost Docker container, which has no real network latency.
 throttle_delay: 0.05
 
 scope:
-  # Everything runs on the same localhost Docker network so there are no subdomains. 
+  # All targets run on the same localhost Docker network - no subdomains.
   include_subdomains: false
-  # Juice Shop's REST API and resource endpoints all live under these two prefixes. 
+  # Juice Shop's REST API, and all resource endpoints live under these two prefixes.
   allowed_paths:
     - "/api/"
     - "/rest/"
-  # Disallowed paths are what need to be tested - often the most vulnerable.
+  # Disallowed paths from robots.txt - often the best targets.
   robots_txt: false
 
 login:
-  # Juice Shop doesn't use an HTML login form, credentials go to its `REST API` as JSON.
+  # Juice Shop does not use an HTML login formc, credentials are sent as JSON to its REST API.
   login_url: "http://localhost:3000/rest/user/login"
   login_method: POST
   username_field: "email"
   password_field: "password"
-  # A successful login will return a `JSON body` with a `token` field, containing the `JWT`. 
+  # Successful Juice Shop login returns 200 OK with a `token` field containing the JWT.
   success_indicator: "token"
 
-# `Admin` is used for vertical privilege escalation testing. 
-# `user_a` and `user_b` are used against each other for horizontal IDOR testing.
-# Passwords are recorded in `credentials.txt` (excluded from git).
+# All three roles use bearer auth, as Juice Shop issues a JWT on every successful login.
+# `admin` is used for vertical privilege escalation testing against admin-only endpoints.
+# `user_a`, and `user_b` are used against each other for horizontal IDOR and BOLA testing.
 credentials:
   - username: "admin@juice-sh.op"
     password: "CHANGE_ME_ADMIN"
@@ -52,42 +55,58 @@ credentials:
     auth_type: "bearer"
 
 crawl:
-  # 3 levels should be enough to reach all of Juice Shop's `REST` endpoints from the root. 
+  # 3 levels to reach all Juice Shop REST endpoints from the root.
   max_depth: 3
-  # Raised from 200 because Juice Shop has over 60+ endpoints and hits 200 too early. 
+  # Raised from 200 - Juice Shop has 60+ endpoints, and would prematurely reach the default limit.
   max_pages: 500
-  # 5 minute hard limit to stop the crawler from hanging if something goes awry.
+  # Hard 5 minute cutoff, preventing the crawler from hanging if a route does not respond.
   max_crawl_time: 300
   follow_external: false
-  # Juice Shop is an Angular SPA meaning that static crawling wont reveal all the endpoints on its own.
+  # Juice Shop is an Angular SPA - static crawling alone will not reveal all endpoints.
   handle_spa: true
 
 rate_limit:
-  # Starting low to avoid Juice Shop degradation within the virtual machine. 
+  # Starting at 10 requests per second avoids Juice Shop degradation inside the Kali VM.
   requests_per_second: 10
   total_requests: 100
-  # Headers are rotated to test whether Juice Shop's rate limiting checks the IP.
+  # Headers rotated to test whether Juice Shop rate limiting is bound to the IP address.
   bypass_headers:
     - "X-Forwarded-For"
     - "X-Originating-IP"
     - "X-Remote-IP"
     - "X-Client-IP"
     - "X-Real-IP"
-  # Only for if there isn't 429 responses at 10 requests per second.
-  # If there isn't, then escalate automatically throughout the tiers. 
+  # automatically escalates if no 429 responses are observed at the lower tier.
   rate_limit_tiers:
     - { rps: 10,  count: 100 }
     - { rps: 25,  count: 150 }
     - { rps: 50,  count: 200 }
 
-# Basket --> checkout sequence is the main logic test case for Juice Shop.
+# Add-to-basket then checkout - primary workflow test case for Juice Shop.
+# Basket ID must be resolved via pre-step GET prior to executing main steps
+# WorkflowRecorder substitutes all `{{pre.*}}` and `{{token}}` placeholders at runtime.
+# Success response: 200 OK with `orderConfirmation` field in the JSON body.
+# Failure responses: 401 (no session), 403 (wrong role or basket ownership violation), 400 (malformed body).
 workflows:
   - name: "add_to_basket_and_checkout"
+
+    # Pre-steps run before main steps, and extract values needed as placeholders.
+    # `GET /rest/basket/{{user_id}}` resolves the authenticated user's basket ID at runtime.
+    pre_steps:
+      - name: "discover_basket_id"
+        method: GET
+        path: "/rest/basket/{{user_id}}"
+        expected_status: 200
+        extract:
+          - name: "user_basket_id"
+            source: "json"
+            path: "data.id"
+
     steps:
       - name: "add_item_to_basket"
         method: POST
         path: "/api/BasketItems"
-        # {{pre.user_basket_id}} is substituted at runtime once `basket ID` is known.
+        # `{{pre.user_basket_id}}` is substituted at runtime, once the pre-step resolves the basket ID.
         body: '{"ProductId": 1, "BasketId": "{{pre.user_basket_id}}", "quantity": 1}'
         expected_status: 200
         extract:
@@ -98,16 +117,14 @@ workflows:
       - name: "checkout"
         method: POST
         path: "/rest/basket/{{pre.user_basket_id}}/checkout"
+        # 200 OK with `orderConfirmation` in the body confirms checkout completed successfully.
         expected_status: 200
-        # The presence of `orderConfirmation` in the response confirms that the checkout succeeded. 
         extract:
           - name: "order_confirmation"
             source: "json"
             path: "orderConfirmation"
 
-# Both formats are generated. 
-# HTML for video demonstration.
-# JSON for metric calculations.
+# HTML report possibly used in the live demonstration, JSON is used for recall calculations.
 reporting:
   output_dir: "reports/"
   format: "both"
