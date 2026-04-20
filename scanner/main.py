@@ -117,6 +117,25 @@ class Scanner:
 
         self._print_banner()
 
+        ## Pre-Scan Authorisation Gate.
+        # Displays the target URL, and requires explicit operator confirmation, before any requests are sent.
+        print(f"  Target : {self.config.target_url}")
+        print("  WARNING: Only scan systems you have explicit written authorisation to test.")
+        print("  Scanning without permission may be illegal under the Computer Misuse Act 1990.\n")
+
+        # Reads operator input, falling back to an empty string if stdin is non-interactive, which causes an abort.
+        try:
+            confirmation = input("  Do you have authorisation to scan this target? [y/N]: ").strip().lower()
+        except EOFError:
+            confirmation = ""
+
+        # Aborts immediately if the operator does not explicitly confirm authorisation before scanning begins.
+        if confirmation not in ("y", "yes"):
+            print("\n[!] Scan aborted. No authorisation confirmed.")
+            sys.exit(0)
+
+        print()
+
         # Records the UTC scan start time, before any modules run, so that the duration can be calculated at the end.
         scan_start = datetime.datetime.utcnow()
         # Initialises the master findings list that all modules append their `Vulnerability` objects into.
