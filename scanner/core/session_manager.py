@@ -122,10 +122,15 @@ class SessionManager:
 
     def _authenticate_bearer(self, cred: dict) -> bool:
         # Handles the token-based authentication (e.g., `JWT APIs` like OWASP Juice Shop).
-        # Extracts tokens from the JSON response and stores it for a header injection.
+        # Extracts tokens from the JSON response, and then stores it for a header injection.
 
         login_cfg = self.config.login_config
-        login_url = self.config.target_url.rstrip("/") + "/" + login_cfg["login_url"].lstrip("/")
+        raw_login_url = login_cfg["login_url"]
+        # Uses the login URL directly if it is already absolute, otherwise prepends the base target URL.
+        if raw_login_url.startswith("http://") or raw_login_url.startswith("https://"):
+            login_url = raw_login_url
+        else:
+            login_url = self.config.target_url.rstrip("/") + "/" + raw_login_url.lstrip("/")
 
         try:
             response = self.http_client.send_request(
