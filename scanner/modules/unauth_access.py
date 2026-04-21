@@ -54,9 +54,9 @@ class UnauthAccessChecker:
         # Sends a GET or POST request to the endpoint URL using the `user_a` authenticated session from `http_client`.
         try:
             if endpoint.method.upper() == "POST":
-                response_auth = self.http_client.post(endpoint.url, role="user_a")
+                response_auth = self.http_client.send_request("POST", endpoint.url, session_key="user_a")[0]
             else:
-                response_auth = self.http_client.get(endpoint.url, role="user_a")
+                response_auth = self.http_client.send_request("GET", endpoint.url, session_key="user_a")[0]
         except Exception as exc:
             logger.warning(f"Authenticated request to {endpoint.url} failed: {exc}")
             return

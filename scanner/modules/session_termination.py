@@ -58,7 +58,7 @@ class SessionTerminationValidator:
         # Iterates over each candidate URL, and returns the first that responds with the status 200 for the assigned role.
         for url in candidates:
             try:
-                response = self.http_client.get(url, role=role)
+                response = self.http_client.send_request("GET", url, session_key=role)[0]
                 # Returns the URL immediately if the authenticated request confirms a 200 response.
                 if response is not None and response.status_code == 200:
                     logger.debug(
@@ -92,7 +92,7 @@ class SessionTerminationValidator:
         for path in logout_candidates:
             url = self.config.target_url.rstrip("/") + path
             try:
-                response = self.http_client.get(url, role=None)
+                response = self.http_client.send_request("GET", url)[0]
                 # Returns the URL when the server responds with any status other than 404.
                 if response is not None and response.status_code != 404:
                     logger.debug(
@@ -262,7 +262,7 @@ class SessionTerminationValidator:
 
         # Confirms that the protected endpoint returns 200, before performing the logout and replay sequence.
         try:
-            pre_logout_response = self.http_client.get(protected_url, role=role)
+            pre_logout_response = self.http_client.send_request("GET", protected_url, session_key=role)[0]
         except Exception as exc:
             logger.warning(
                 f"Pre-logout request to {protected_url} failed for role {role}: {exc}"
@@ -289,7 +289,7 @@ class SessionTerminationValidator:
 
         # Sends the logout request using the role's active session, to trigger the server-side invalidation.
         try:
-            self.http_client.get(logout_url, role=role)
+            self.http_client.send_request("GET", logout_url, session_key=role)
         except Exception as exc:
             logger.warning(
                 f"Logout request to {logout_url} failed for role {role}: {exc}"

@@ -62,8 +62,8 @@ crawl:
   # Hard 5 minute cutoff, preventing the crawler from hanging if a route does not respond.
   max_crawl_time: 300
   follow_external: false
-  # Juice Shop is an Angular SPA - static crawling alone will not reveal all endpoints.
-  handle_spa: true
+  # Disabled - Playwright is unavailable on this system, and the SPA crawler would hang the scan.
+  handle_spa: false
 
 rate_limit:
   # Starting at 10 requests per second avoids Juice Shop degradation inside the Kali VM.

@@ -94,7 +94,7 @@ class HorizontalAuthTester:
         for path in self_ref_paths:
             url = self.config.target_url.rstrip("/") + path
             try:
-                response = self.http_client.get(url, role=role)
+                response = self.http_client.send_request("GET", url, session_key=role)[0]
                 # SKips this path if no response was received, or the server did not return 200.
                 if response is None or response.status_code != 200:
                     continue
@@ -116,11 +116,14 @@ class HorizontalAuthTester:
                 logger.debug(f"Self-referencing path {path} failed for role {role}: {exc}")
 
         # Strat 2 tries the endpoint itself as a list resource, and cross-references returned IDs with the role's email.
-        role_credentials = self.config.credentials.get(role, {})
+        # Finds the matching credential dict from the credentials list by role field.
+        role_credentials = next(
+            (c for c in self.config.credentials if c.get("role") == role), {}
+        )
         role_email = role_credentials.get("email", role_credentials.get("username", ""))
 
         try:
-            response = self.http_client.get(endpoint.url, role=role)
+            response = self.http_client.send_request("GET", endpoint.url, session_key=role)[0]
             # Skips strategy 2 if there are no valid JSON array responses returned from the endpoint.
             if response is not None and response.status_code == 200:
                 try:
@@ -188,7 +191,7 @@ class HorizontalAuthTester:
 
             # Step a sends the leigitimate request as the owner, to establish an authenticated baseline response.
             try:
-                response_owner = self.http_client.get(url_with_id, role=owner_role)
+                response_owner = self.http_client.send_request("GET", url_with_id, session_key=owner_role)[0]
             except Exception as exc:
                 logger.debug(f"Owner request to {url_with_id} as {owner_role} failed: {exc}")
                 continue
@@ -199,7 +202,7 @@ class HorizontalAuthTester:
 
             # Step b sends the exact same URL, using the attacker's session to test for unauthorised access.
             try:
-                response_attacker = self.http_client.get(url_with_id, role=attacker_role)
+                response_attacker = self.http_client.send_request("GET", url_with_id, session_key=attacker_role)[0]
             except Exception as exc:
                 logger.debug(f"Attacker request to {url_with_id} as {attacker_role} failed: {exc}")
                 continue
@@ -280,9 +283,9 @@ class HorizontalAuthTester:
 
         # Sends a write request for `role_a`'s resource using `role_b`'s session to test for unauthorised modification.
         try:
-            # Uses `http_client.post` for PUT and PATCH as a close enough proxy to test whether the server accepts the modification.
+            # Uses `http_client.send_request` for PUT and PATCH as a close enough proxy to test whether the server accepts the modification.
             if endpoint.method.upper() in ("PUT", "PATCH"):
-                response = self.http_client.post(url_with_id, role=role_b)
+                response = self.http_client.send_request("POST", url_with_id, session_key=role_b)[0]
             elif endpoint.method.upper() == "DELETE":
                 # Builds a raw `request.Session` for DELETE, because `http_client` does not expose a delete convenience method.
                 session_kwargs = self.session_manager.get_session_kwargs(role_b)
@@ -298,7 +301,7 @@ class HorizontalAuthTester:
                 response = s.delete(url_with_id, timeout=10, verify=self.config.verify_ssl)
             else:
                 # Falls back to a POST for any other write method, not explicitly handled above.
-                response = self.http_client.post(url_with_id, role=role_b)
+                response = self.http_client.send_request("POST", url_with_id, session_key=role_b)[0]
         except Exception as exc:
             logger.debug(f"IDOR write request to {url_with_id} as {role_b} failed: {exc}")
             return
@@ -383,7 +386,7 @@ class HorizontalAuthTester:
             url_with_id = self._build_url_with_id(endpoint, probe_id)
 
             try:
-                response = self.http_client.get(url_with_id, role=role)
+                response = self.http_client.send_request("GET", url_with_id, session_key=role)[0]
             except Exception as exc:
                 logger.debug(f"Enumeration request to {url_with_id} failed: {exc}")
                 continue
