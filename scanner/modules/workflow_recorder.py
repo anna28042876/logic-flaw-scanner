@@ -197,13 +197,19 @@ class WorkflowRecorder:
         """ Iterates through all the workflow definitions in `self.config.workflows`, combining any `pre_steps` with the main `steps` list,
         and calls `record_workflow` for each to populate `self.recorded_workflows`."""
 
-        # Iterates through each named workflow definition in the config, and records it with pre-steps prepended.
-        for workflow_name, workflow_def in self.config.workflows.items():
+        # Handles both list format (from YAML array) and dict format, for workflow definitions.
+        raw_workflows = self.config.workflows
+        if isinstance(raw_workflows, list):
+            workflows_dict = {item["name"]: item for item in raw_workflows}
+        else:
+            workflows_dict = raw_workflows
+        # Iterates through each of the named workflow definitions in the config, and records it with pre-steps prepended.
+        for workflow_name, workflow_def in workflows_dict.items():
             # Reads the role, pre-steps, and main steps from the worfklow definition dictionary.
             role = workflow_def.get('role', 'user_a')
             pre_steps = workflow_def.get('pre_steps', [])
             steps = workflow_def.get('steps', [])
-            # Prepends pre-steps to the main steps, so token extraction setup runs before the workflow proper.
+            # Prepends the pre-steps to the main steps, so that token extraction setup runs before the workflow proper.
             all_steps = pre_steps + steps
             self.record_workflow(workflow_name, all_steps, role=role)
             logger.info(
