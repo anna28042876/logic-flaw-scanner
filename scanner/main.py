@@ -369,6 +369,7 @@ class Scanner:
                     self.config,
                     self.http_client,
                     self.session_manager,
+                    self.comparator,
                 )
 
                 # Iterates through all the configured roles, and tests whether the server invalidates sessions on logout.
@@ -403,7 +404,6 @@ class Scanner:
                 session_fixation_tester = SessionFixationTester(
                     self.config,
                     self.http_client,
-                    self.session_manager,
                 )
                 # Runs both the PHPSESSID fixation check, for DVWA, and the JWT token reuse check for Juice Shop.
                 session_fixation_tester.test_fixation()
