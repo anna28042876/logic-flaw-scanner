@@ -75,7 +75,10 @@ class SessionFixationTester:
         JSON and form-encoded formats. Then returns the raw JWT string, if found in the response body or headers, or None if 
         authentication fails."""
         login_url = self._get_login_url()
-        role_credentials = self.config.credentials.get(role, {})
+        # Finds the matching credential dict from the credentials list by role field.
+        role_credentials = next(
+            (c for c in self.config.credentials if c.get("role") == role), {}
+        )
         username = role_credentials.get("username", role_credentials.get("email", ""))
         password = role_credentials.get("password", "")
 
@@ -221,7 +224,10 @@ class SessionFixationTester:
             return
 
         login_url = self._get_login_url()
-        role_credentials = self.config.credentials.get("user_a", {})
+        # Finds the user_a credential dict from the credentials list by matching the role field.
+        role_credentials = next(
+            (c for c in self.config.credentials if c.get("role") == "user_a"), {}
+        )
         username = role_credentials.get("username", role_credentials.get("email", ""))
         password = role_credentials.get("password", "")
 

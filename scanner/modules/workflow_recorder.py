@@ -123,7 +123,7 @@ class WorkflowRecorder:
 
             # Fetches the target page, and extracts a CSRF token when the step declares a form content type.
             if 'form' in content_type:
-                page_response = self.http_client.get(url, **session_kwargs)
+                page_response = self.http_client.get(url, **session_kwargs)[0]
                 csrf_data = CSRFExtractor.get_csrf_for_request(page_response)
                 # Injects the CSRF token into the request body, when the token placement is a form field.
                 if csrf_data and csrf_data.get('placement') == 'form':
@@ -131,12 +131,12 @@ class WorkflowRecorder:
                         body = {}
                     body[csrf_data['field_name']] = csrf_data['token']
 
-            # Sends GET or POST to the resolved URL, using the role session, and substituted body.
+            # Sends GET, or POST, requests to the resolved URL, using the role session, and substituted body.
             try:
                 if method == 'GET':
-                    response = self.http_client.get(url, **session_kwargs)
+                    response = self.http_client.get(url, **session_kwargs)[0]
                 else:
-                    response = self.http_client.post(url, json=body, **session_kwargs)
+                    response = self.http_client.post(url, json=body, **session_kwargs)[0]
             except Exception as exc:
                 logger.warning(
                     "Step %d of workflow `%s` raised an exception on %s %s: %s",

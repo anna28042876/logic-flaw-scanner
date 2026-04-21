@@ -279,7 +279,7 @@ class SessionTerminationValidator:
 
         logout_url = self._find_logout_endpoint()
 
-        # Runs the JWT-Specific fallback test when no server-side logout endpoint is available on the target.
+        # Runs the JWT-Specific fallback test, when no server-side logout endpoint is available on the target.
         if logout_url is None:
             logger.info(
                 f"Running JWT fallback test for role {role} as no server-side logout endpoint was found."
@@ -287,7 +287,7 @@ class SessionTerminationValidator:
             self._run_jwt_fallback(role, old_session_kwargs)
             return
 
-        # Sends the logout request using the role's active session to trigger the server-side invalidation.
+        # Sends the logout request using the role's active session, to trigger the server-side invalidation.
         try:
             self.http_client.get(logout_url, role=role)
         except Exception as exc:
@@ -295,7 +295,7 @@ class SessionTerminationValidator:
                 f"Logout request to {logout_url} failed for role {role}: {exc}"
             )
 
-        # Replays the old session credentials against the protected endpoint after logout to test invalidation. 
+        # Replays the old session credentials against the protected endpoint, after logout to test invalidation. 
         try:
             import requests as _requests
             replay_session = _requests.Session()
@@ -303,7 +303,7 @@ class SessionTerminationValidator:
             old_headers = old_session_kwargs.get("headers", {})
             old_cookies = old_session_kwargs.get("cookies", {})
 
-            # Applies all the headers and cookies from the pre-logout credentials to the replay session. 
+            # Applies all the header, and cookies, from the pre-logout credentials to the replay session. 
             if old_headers:
                 replay_session.headers.update(old_headers)
             if old_cookies:
@@ -376,10 +376,10 @@ class SessionTerminationValidator:
         """ Runs `test_logout_invalidation` for every non-admin role defined in `config.credentials`, covering all standard test
         accounts on Juice Shop DVWA."""
 
-        # Collects all credential role names from `config`, excluding the admin role prior to testing.
+        # Extracts role names from the credentials list, excluding the admin role prior to testing.
         roles = [
-            role for role in self.config.credentials.keys()
-            if role != "admin"
+            cred["role"] for cred in self.config.credentials
+            if cred.get("role") != "admin"
         ]
 
         logger.info(

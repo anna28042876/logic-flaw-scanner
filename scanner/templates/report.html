@@ -361,7 +361,7 @@
             <span>Target: <strong>{{ scan_result.target_url }}</strong></span>
             <span>Scan Date: {{ scan_result.scan_start.strftime('%d %B %Y') }}</span>
             <span>Start Time: {{ scan_result.scan_start.strftime('%H:%M:%S') }}</span>
-            <span>Duration: {{ scan_result.duration | round(1) }}s</span>
+            <span>Duration: {{ scan_result.scan_duration_seconds | round(1) }}s</span>
         </div>
     </header>
 
@@ -384,7 +384,7 @@
                 </div>
                 <div class="summary-item">
                     <span class="label">Duration</span>
-                    <span class="value">{{ scan_result.duration | round(1) }} seconds</span>
+                    <span class="value">{{ scan_result.scan_duration_seconds | round(1) }} seconds</span>
                 </div>
                 <div class="summary-item">
                     <span class="label">Endpoints Discovered</span>

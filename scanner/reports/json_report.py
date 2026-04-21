@@ -69,16 +69,15 @@ class JSONReportGenerator:
         return findings
 
     def _build_evidence(self):
-        """Converts the `evidence_store` dictionary into a JSON-serialisable form. Returns a dictionary keyed by evidence ID, with each
+        """Converts the `evidence_store` into a JSON-serialisable form. Returns a dictionary keyed by evidence ID, with each
         value being the corresponding evidence dictionary, from `EvidenceCollector`."""
 
         # Initialises an empty dictionary, that will mirror the structure of `evidence_store`.
         evidence = {}
 
-        # Copies each evidence entry from `evidence_store`, into the output dictionary keyed by evidence ID.
-        for evidence_id, evidence_record in self.evidence_store.items():
-            # Each `evidence_record` is already a plain dictionary, built by `EvidenceCollector.collect`, and therefore no conversion is needed.
-            evidence[evidence_id] = evidence_record
+        # Iterates the evidence list returned by `get_all_evidence`, keying each entry by its id field.
+        for evidence_record in self.evidence_store.get_all_evidence():
+            evidence[evidence_record.get("id", "unknown")] = evidence_record
 
         return evidence
 
