@@ -5,8 +5,8 @@ Supports multiple authentication mechanisms (`form`, `bearer/JWT`, `basic`, `API
 single interface so that the rest of the scanner does not need to care how authentication is implemented for each role.
 
 Each "role" e.g., admin, user_a, user_b, gets its own fully isolated session state, which is important for vulnerability
-testing (especially IDOR), and therefore ensuring no cookies, headers, or tokens leak between roles during concurrent 
-scanning. """
+testing (especially IDOR), and therefore ensuring no cookies, headers, or tokens leak between roles during concurrent
+scanning."""
 
 import base64
 
@@ -52,11 +52,17 @@ class SessionManager:
             }
 
         # Constructs full login URL safely.
-        login_url = self.config.target_url.rstrip("/") + "/" + login_cfg["login_url"].lstrip("/")
+        login_url = (
+            self.config.target_url.rstrip("/")
+            + "/"
+            + login_cfg["login_url"].lstrip("/")
+        )
 
         # First reqests the login page to extract the `CSRF` tokens, if present.
         try:
-            get_resp = fresh_session.get(login_url, verify=self.config.verify_ssl, timeout=15)
+            get_resp = fresh_session.get(
+                login_url, verify=self.config.verify_ssl, timeout=15
+            )
             soup = BeautifulSoup(get_resp.text, "lxml")
         except Exception as e:
             logger.warning(f"Could not GET login page for CSRF extraction: {e}")
@@ -70,11 +76,14 @@ class SessionManager:
 
         # Attempts to detect and include `CSRF` tokens automatically.
         if soup:
-            for name in ("_csrf", "csrf_token", "csrfmiddlewaretoken"):
+            # Checks DVWA's `user_token` field, alongside common framework CSRF field names - before the form POST request.
+            for name in ("_csrf", "csrf_token", "csrfmiddlewaretoken", "user_token"):
                 field = soup.find("input", {"name": name})
                 if field and field.get("value"):
                     payload[name] = field["value"]
-                    logger.debug(f"CSRF token found in field '{name}' for {cred['role']}")
+                    logger.debug(
+                        f"CSRF token found in field '{name}' for {cred['role']}"
+                    )
                     break
 
             # Also supports frameworks that expose `CSRF` via the meta tags.
@@ -100,7 +109,9 @@ class SessionManager:
         success_indicator = str(login_cfg.get("success_indicator", "200"))
         body_lower = response.text.lower()
         status_match = str(response.status_code) == success_indicator
-        no_error = not any(kw in body_lower for kw in ("invalid", "incorrect", "failed", "error"))
+        no_error = not any(
+            kw in body_lower for kw in ("invalid", "incorrect", "failed", "error")
+        )
 
         if status_match or no_error:
             # Stores the session data for later use.
@@ -114,10 +125,40 @@ class SessionManager:
             # Registers this session with `HTTPClient` so that all future requests will reuse it.
             self.http_client.register_session(cred["role"], fresh_session)
 
-            logger.info(f"Form auth succeeded for role '{cred['role']}' ({cred['username']})")
+            logger.info(
+                f"Form auth succeeded for role '{cred['role']}' ({cred['username']})"
+            )
+
+            # Executes any post-authentication steps using the admin session, e.g. setting DVWA security level to Low.
+            post_auth_steps = login_cfg.get("post_auth_steps", [])
+            if post_auth_steps and cred.get("role") == "admin":
+                # Iterates each configured post-auth step and dispatches a POST request using the authenticated admin session.
+                for step in post_auth_steps:
+                    step_url = step.get("url", "")
+                    step_method = step.get("method", "POST").upper()
+                    step_data = step.get("data", {})
+                    try:
+                        if step_method == "POST":
+                            fresh_session.post(
+                                step_url,
+                                data=step_data,
+                                verify=self.config.verify_ssl,
+                                timeout=15,
+                                allow_redirects=True,
+                            )
+                        logger.info(
+                            f"Post-auth step completed for admin role: {step_method} {step_url}"
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            f"Post-auth step failed for admin role at {step_url}: {exc}"
+                        )
+
             return True
 
-        logger.warning(f"Form auth failed for role '{cred['role']}' - status {response.status_code}")
+        logger.warning(
+            f"Form auth failed for role '{cred['role']}' - status {response.status_code}"
+        )
         return False
 
     def _authenticate_bearer(self, cred: dict) -> bool:
@@ -130,7 +171,9 @@ class SessionManager:
         if raw_login_url.startswith("http://") or raw_login_url.startswith("https://"):
             login_url = raw_login_url
         else:
-            login_url = self.config.target_url.rstrip("/") + "/" + raw_login_url.lstrip("/")
+            login_url = (
+                self.config.target_url.rstrip("/") + "/" + raw_login_url.lstrip("/")
+            )
 
         try:
             response = self.http_client.send_request(
@@ -143,14 +186,18 @@ class SessionManager:
             return False
 
         if response is None:
-            logger.warning(f"Bearer login returned no response for role '{cred['role']}'")
+            logger.warning(
+                f"Bearer login returned no response for role '{cred['role']}'"
+            )
             return False
 
         # Parse the JSON response safely.
         try:
             body = response.json()
         except Exception:
-            logger.warning(f"Bearer login response was not valid JSON for role '{cred['role']}'")
+            logger.warning(
+                f"Bearer login response was not valid JSON for role '{cred['role']}'"
+            )
             return False
 
         # Tries multiple common token fields across frameworks.
@@ -165,7 +212,9 @@ class SessionManager:
                     break
 
         if not extracted_token:
-            logger.warning(f"Could not extract bearer token for role '{cred['role']}' - keys found: {list(body.keys())}")
+            logger.warning(
+                f"Could not extract bearer token for role '{cred['role']}' - keys found: {list(body.keys())}"
+            )
             return False
 
         # Stores tokens and pre-built authorisation headers.
@@ -176,7 +225,9 @@ class SessionManager:
             "auth_type": "bearer",
             "username": cred["username"],
         }
-        logger.info(f"Bearer auth succeeded for role '{cred['role']}' ({cred['username']})")
+        logger.info(
+            f"Bearer auth succeeded for role '{cred['role']}' ({cred['username']})"
+        )
         return True
 
     def _authenticate_basic(self, cred: dict) -> bool:
@@ -191,7 +242,9 @@ class SessionManager:
 
         # Verifies the credentials against a known endpoint.
         test_url = self.config.target_url.rstrip("/") + "/api/"
-        response, _ = self.http_client.send_request("GET", test_url, headers=auth_header)
+        response, _ = self.http_client.send_request(
+            "GET", test_url, headers=auth_header
+        )
 
         if response is None or response.status_code not in (200, 201, 204):
             logger.warning(f"Basic auth test request failed for role '{cred['role']}'")
@@ -203,7 +256,9 @@ class SessionManager:
             "auth_type": "basic",
             "username": cred["username"],
         }
-        logger.info(f"Basic auth succeeded for role '{cred['role']}' ({cred['username']})")
+        logger.info(
+            f"Basic auth succeeded for role '{cred['role']}' ({cred['username']})"
+        )
         return True
 
     def _authenticate_api_key(self, cred: dict) -> bool:
@@ -247,20 +302,28 @@ class SessionManager:
             elif auth_type == "api_key":
                 results[role] = self._authenticate_api_key(cred)
             else:
-                logger.warning(f"Unknown auth_type '{auth_type}' for role '{role}' - skipping")
+                logger.warning(
+                    f"Unknown auth_type '{auth_type}' for role '{role}' - skipping"
+                )
                 results[role] = False
 
         return results
 
     def get_session_kwargs(self, role: str) -> dict:
-        # The core abstraction used across the scanner. 
-        """It returns the correct request `kwargs` (cookies or headers) for a given role, 
-        allowing other modules to remain completely auth-agnostic. """
+        # The core abstraction used across the scanner.
+        """It returns the correct request `kwargs` (cookies or headers) for a given role,
+        allowing other modules to remain completely auth-agnostic."""
+
+        # Returns empty kwargs immediately for unauthenticated requests, without logging a warning.
+        if role is None:
+            return {}
 
         session = self.sessions.get(role)
 
         if not session:
-            logger.warning(f"No session found for role '{role}' - returning empty kwargs")
+            logger.warning(
+                f"No session found for role '{role}' - returning empty kwargs"
+            )
             return {}
 
         auth_type = session.get("auth_type")

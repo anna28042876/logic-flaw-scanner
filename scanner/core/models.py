@@ -1,8 +1,8 @@
 """
 `scanner/core/models.py`
 
-Defines the core data models used across the scanner, including endpoints, parameters, vulnerabilities, 
-and final scan results. These dataclasses act as a shared structure between all the components (e.g., 
+Defines the core data models used across the scanner, including endpoints, parameters, vulnerabilities,
+and final scan results. These dataclasses act as a shared structure between all the components (e.g.,
 crawler, test modules, and reporting), which ensures consistent data handling and easy conversion to dictionaries.
 """
 
@@ -14,7 +14,7 @@ from typing import List, Dict, Optional, Any
 class Endpoint:
     # Represents a single unique route discovered during scanning.
     # COmbines the URL + HTTP method to distinguish between e.g., `GET /users`, and `POST /users`.
-    # This is the primary unit passed into testing modules. 
+    # This is the primary unit passed into testing modules.
 
     url: str
     method: str = "GET"
@@ -41,7 +41,7 @@ class Endpoint:
 
 @dataclass
 class Parameter:
-    # Represents a single parameter associated with an endpoint. 
+    # Represents a single parameter associated with an endpoint.
     # Used heavily during fuzzing and IDOR testing to determine attack surface.
 
     name: str
@@ -52,7 +52,7 @@ class Parameter:
     # Inferred type: `string`, `integer`, `boolean`, or `unknown`.
     param_type: str
 
-    # Example value that is observed during crawling. 
+    # Example value that is observed during crawling.
     sample_value: Optional[str] = None
 
     # Flags likely object identifiers (key targets for IDOR testing).
@@ -66,8 +66,8 @@ class Parameter:
 @dataclass
 class Vulnerability:
     # Represents a confirmed or potential vulnerability that is discovered by a test module.
-    # This is the main output unit that gets aggregated into reports. 
-    
+    # This is the main output unit that gets aggregated into reports.
+
     vuln_type: str
 
     # Standardised severity rating (`Critical`, `High`, `Medium`, `Low`, `Info`)
@@ -92,7 +92,7 @@ class Vulnerability:
         return asdict(self)
 
     def to_summary(self) -> str:
-        # One-line summary used in console outputs and report indexes. 
+        # One-line summary used in console outputs and report indexes.
         return f"[{self.severity}] {self.vuln_type} at {self.method} {self.endpoint}"
 
 
@@ -113,11 +113,14 @@ class ScanResult:
     vulnerabilities: List[Vulnerability] = field(default_factory=list)
 
     ## Operational metadata.
-    # Total HTTP requests made during the scan. 
+    # Total HTTP requests made during the scan.
     total_requests: int = 0
 
     # Which modules were executed.
     modules_run: List[str] = field(default_factory=list)
+
+    # SHA256-derived 16-character identifier assigned at report generation time.
+    scan_id: str = ""
 
     def to_dict(self) -> dict:
         # Converts the entire scan result into a serialisable structure.

@@ -1,0 +1,51 @@
+/home/kali/logic-flaw-scanner/scanner/main.py:88: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+╔══════════════════════════════════════════════════════════════╗
+║          Logic Flaw Scanner  v1.0.0                          ║
+║          Semi-Automated Web Vulnerability Discovery          ║
+╠══════════════════════════════════════════════════════════════╣
+║  Target   : http://localhost:3000                            ║
+║  Roles    : 3                                                ║
+║  Started  : 2026-04-24 13:48:51 UTC                          ║
+╚══════════════════════════════════════════════════════════════╝
+        
+  Target : http://localhost:3000
+  WARNING: Only scan systems you have explicit written authorisation to test.
+  Scanning without permission may be illegal under the Computer Misuse Act 1990.
+
+  Do you have authorisation to scan this target? [y/N]: 
+/home/kali/logic-flaw-scanner/scanner/main.py:140: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  scan_start = datetime.datetime.utcnow()
+No session found for role 'None' - returning empty kwargs
+Could not extract token `user_basket_id` via JSON path 'data.id': Expecting value: line 1 column 1 (char 0)
+Token placeholder {{pre.user_basket_id}} has no matching entry in `token_store`.
+Could not extract token `basket_item_id` via JSON path 'data.id': Expecting value: line 1 column 1 (char 0)
+Could not extract token `order_confirmation` via JSON path 'orderConfirmation': Expecting value: line 1 column 1 (char 0)
+HIGH: Workflow skip-all bypass confirmed for `add_to_basket_and_checkout`.
+HIGH: Step skip bypass confirmed for `add_to_basket_and_checkout` at step 2 ().
+HIGH: Out-of-order bypass confirmed for `add_to_basket_and_checkout` with order 1 -> 3 -> 2.
+HIGH: Out-of-order bypass confirmed for `add_to_basket_and_checkout` with order 2 -> 1 -> 3.
+HIGH: Out-of-order bypass confirmed for `add_to_basket_and_checkout` with order 2 -> 3 -> 1.
+HIGH: Out-of-order bypass confirmed for `add_to_basket_and_checkout` with order 3 -> 1 -> 2.
+HIGH: Out-of-order bypass confirmed for `add_to_basket_and_checkout` with order 3 -> 2 -> 1.
+HIGH: Cross-session replay confirmed for workflow `add_to_basket_and_checkout`.
+CRITICAL: Unauthenticated replay confirmed for workflow `add_to_basket_and_checkout`.
+/home/kali/logic-flaw-scanner/scanner/main.py:633: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  scan_end = datetime.datetime.utcnow()
+
+================================================================
+  SCAN COMPLETE
+================================================================
+  Target          : http://localhost:3000
+  Duration        : 1.9s
+  Endpoints found : 0
+  Requests sent   : 27
+  Total findings  : 9
+----------------------------------------------------------------
+  Critical     : 1
+  High         : 8
+================================================================
+  Reports saved to: reports/
+================================================================
+

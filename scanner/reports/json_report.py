@@ -39,7 +39,7 @@ class JSONReportGenerator:
         return {
             "scanner_version": self.SCANNER_VERSION,
             # `scan_id` is the SHA256-derived, 16-character identifier, assigned by `EvidenceCollector`.
-            "scan_id": getattr(self.scan_result, "scan_id", None),
+            "scan_id": self.scan_result.scan_id,
             "target_url": self.scan_result.target_url,
             # `scan_start`, and `scan_end` are datetime objects serialiseed to strings, via `default=str`, in `generate`.
             "scan_start": self.scan_result.scan_start,

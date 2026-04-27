@@ -8,13 +8,11 @@ target:
   excluded_paths:
     - "^/logout.php"
     - "^/setup.php"
-
 # DVWA runs on plain HTTP locally, so SSL verification isn't needed. 
 verify_ssl: false
 proxy: null
 # 0.05s should be fine for a localhost Docker container as it has no real network latency. 
 throttle_delay: 0.05
-
 scope:
   # Everything runs on the same `localhost` Docker network and has no subdomains. 
   include_subdomains: false
@@ -24,7 +22,6 @@ scope:
     - "/dvwa/"
   # Target disallowed Paths - possibly the most vulnerable. 
   robots_txt: false
-
 login:
   # DVWA uses a standard PHP login form, unlike Juice Shop's `REST API` endpoint. 
   login_url: "http://localhost:8080/login.php"
@@ -33,7 +30,14 @@ login:
   password_field: "password"
   # DVWA responds with a `302 redirect` to `/index.php` upon success, not a `200`. 
   success_indicator: "302"
-
+  # D25: Sets DVWA security level to Low after admin login to expose the maximum number of vulnerabilities.
+  # Runs once using the admin session immediately after authentication, before any scan module executes.
+  post_auth_steps:
+    - url: "http://localhost:8080/security.php"
+      method: POST
+      data:
+        security: "low"
+        seclev_submit: "Submit"
 # DVWA uses `PHPSESSID` session cookies not `JWT` bearer tokens. 
 # `user_a` and `user_b` are created manually via a `MYSQL INSERT`.
 # The `admin` default password is intentionally weak, as this app is vulnerable by design. 
@@ -42,17 +46,14 @@ credentials:
     password: "password"
     role: "admin"
     auth_type: "form"
-
   - username: "user_a"
     password: "CHANGE_ME_USER_A"
     role: "user_a"
     auth_type: "form"
-
   - username: "user_b"
     password: "CHANGE_ME_USER_B"
     role: "user_b"
     auth_type: "form"
-
 crawl:
   max_depth: 3
   # Keeping `500` for consistency, though DVWA has far fewer pages than Juice Shop.  
@@ -62,7 +63,6 @@ crawl:
   # DVWA is `server-rendered PHP`, meaning the `SPA Crawler` won't find much.
   # `SPA` has been left enabled either way to ensure nothing `JavaScript-rendered` is missed.
   handle_spa: true
-
 rate_limit:
   # Starting at 10 requests per-second and escalate automatically through the tiers.
   requests_per_second: 10
@@ -79,10 +79,8 @@ rate_limit:
     - { rps: 10,  count: 100 }
     - { rps: 25,  count: 150 }
     - { rps: 50,  count: 200 }
-
 # DVWA has no multi-step purchase sequence, all workflow testing is done directly against Juice Shop.
 workflows: []
-
 # Both formats are generated. 
 # `JSON` for metric calculations.
 # `HTML` for the demonstration video.

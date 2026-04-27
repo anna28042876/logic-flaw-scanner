@@ -1,0 +1,35 @@
+/home/kali/logic-flaw-scanner/scanner/main.py:88: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+╔══════════════════════════════════════════════════════════════╗
+║          Logic Flaw Scanner  v1.0.0                          ║
+║          Semi-Automated Web Vulnerability Discovery          ║
+╠══════════════════════════════════════════════════════════════╣
+║  Target   : http://localhost:3000                            ║
+║  Roles    : 3                                                ║
+║  Started  : 2026-04-24 13:48:21 UTC                          ║
+╚══════════════════════════════════════════════════════════════╝
+        
+  Target : http://localhost:3000
+  WARNING: Only scan systems you have explicit written authorisation to test.
+  Scanning without permission may be illegal under the Computer Misuse Act 1990.
+
+  Do you have authorisation to scan this target? [y/N]: 
+/home/kali/logic-flaw-scanner/scanner/main.py:140: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  scan_start = datetime.datetime.utcnow()
+/home/kali/logic-flaw-scanner/scanner/main.py:633: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  scan_end = datetime.datetime.utcnow()
+
+================================================================
+  SCAN COMPLETE
+================================================================
+  Target          : http://localhost:3000
+  Duration        : 0.2s
+  Endpoints found : 0
+  Requests sent   : 3
+  Total findings  : 0
+----------------------------------------------------------------
+================================================================
+  Reports saved to: reports/
+================================================================
+

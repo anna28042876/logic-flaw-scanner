@@ -2,8 +2,8 @@
 `param_enumerator.py`
  Phase 3.3
 
-Extracts and enumerates parameters found from discovered endpoints across any URL queuery strings, 
-HTML form fields, and JSON response bodies. Fuzzes for hidden parameters against OWASP Juice Shop 
+Extracts and enumerates parameters found from discovered endpoints across any URL queuery strings,
+HTML form fields, and JSON response bodies. Fuzzes for hidden parameters against OWASP Juice Shop
 and DVWA, and flags ID-like fields for downstream IDOR and BOLA testing.
 """
 
@@ -15,23 +15,34 @@ from urllib.parse import parse_qs, urlparse
 
 from bs4 import BeautifulSoup
 
-from scanner.core.http_client import HTTPClient
 from scanner.core.logger import get_logger
 from scanner.core.models import Parameter
-from scanner.core.session_manager import SessionManager
 
 logger = get_logger(__name__)
 
 # Path to the parameter wordlist relative to the project root.
-WORDLIST_PATH = Path(__file__).resolve().parent.parent.parent / "wordlists" / "common_params.txt"
+WORDLIST_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "wordlists" / "common_params.txt"
+)
 
 # Sensitive URL path patterns that qualify as an endpoint for hidden parameter fuzzing.
 SENSITIVE_PATH_PATTERNS = re.compile(r"/admin|/user|/account|/api", re.IGNORECASE)
 
 # File extensions identifying the static assets that must be skipped during fuzzing.
 STATIC_ASSET_EXTENSIONS = (
-    ".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg",
-    ".ico", ".woff", ".woff2", ".ttf", ".eot", ".map",
+    ".js",
+    ".css",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".ico",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".eot",
+    ".map",
 )
 
 # CSRF field name patterns that are used to identify, and log token fields during form extraction.
@@ -44,23 +55,65 @@ ID_FIELD_PATTERNS = re.compile(r"id|Id|ID|uuid|guid|ref|num")
 
 # Backup wordlist of 50 common parameter names used if `wordlists/common_params.txt` is absent
 FALLBACK_WORDLIST = [
-    "id", "user_id", "userId", "uid", "account_id", "accountId",
-    "email", "username", "role", "admin", "debug", "test",
-    "page", "limit", "offset", "sort", "filter", "search", "q",
-    "token", "csrf", "_csrf", "api_key", "key", "callback",
-    "redirect", "url", "next", "return_url", "file", "path",
-    "action", "type", "status", "state", "code", "ref",
-    "invoice_id", "product_id", "item_id", "comment_id", "post_id",
-    "group_id", "org_id", "team_id", "project_id", "order_id",
-    "session_id", "basket_id", "cart_id", "coupon_id",
+    "id",
+    "user_id",
+    "userId",
+    "uid",
+    "account_id",
+    "accountId",
+    "email",
+    "username",
+    "role",
+    "admin",
+    "debug",
+    "test",
+    "page",
+    "limit",
+    "offset",
+    "sort",
+    "filter",
+    "search",
+    "q",
+    "token",
+    "csrf",
+    "_csrf",
+    "api_key",
+    "key",
+    "callback",
+    "redirect",
+    "url",
+    "next",
+    "return_url",
+    "file",
+    "path",
+    "action",
+    "type",
+    "status",
+    "state",
+    "code",
+    "ref",
+    "invoice_id",
+    "product_id",
+    "item_id",
+    "comment_id",
+    "post_id",
+    "group_id",
+    "org_id",
+    "team_id",
+    "project_id",
+    "order_id",
+    "session_id",
+    "basket_id",
+    "cart_id",
+    "coupon_id",
 ]
 
 
 class ParameterEnumerator:
     """Extracts, enumerates, and fuzzes parameters from discovered endpoints."""
-    
+
     def __init__(self, config, http_client, session_manager):
-        """ Stores `config`, `http_client`, and `session_manager` to be used across all
+        """Stores `config`, `http_client`, and `session_manager` to be used across all
         extraction and fuzzing methods. Initialises `self.endpoint_params` as an
         empty dictionary keyed by endpoint URL, ready to be populated by
         `enumerate_all`."""
@@ -71,7 +124,7 @@ class ParameterEnumerator:
         self.endpoint_params = {}
 
     def _extract_url_params(self, url):
-        """  Parses the query string of `url` using `parse_qs`, and returns a list of
+        """Parses the query string of `url` using `parse_qs`, and returns a list of
         `Parameter` objects with `location='url'`. Each query key becomes one
         `Parameter`, with its first value stored as `sample_value`."""
 
@@ -79,11 +132,14 @@ class ParameterEnumerator:
         query_params = parse_qs(urlparse(url).query)
         # Converts each query string key, and its first value into a `Parameter` object.
         for name, values in query_params.items():
-            params.append(Parameter(
-                name=name,
-                location="url",
-                sample_value=values[0] if values else "",
-            ))
+            params.append(
+                Parameter(
+                    name=name,
+                    location="url",
+                    param_type="string",
+                    sample_value=values[0] if values else "",
+                )
+            )
         return params
 
     def _extract_form_params(self, html, endpoint_url):
@@ -108,16 +164,19 @@ class ParameterEnumerator:
                     logger.debug(
                         f"CSRF token field noted in form at {endpoint_url}: {name!r}"
                     )
-                params.append(Parameter(
-                    name=name,
-                    location="body",
-                    sample_value=field.get("value", ""),
-                ))
+                params.append(
+                    Parameter(
+                        name=name,
+                        location="body",
+                        param_type="string",
+                        sample_value=field.get("value", ""),
+                    )
+                )
         return params
 
     def _extract_json_params(self, json_body, _depth=0):
-        """ Recursively walks `json_body` (the parsed JSON dictionary/list) up to a
-        depth of 10. Returns all keys as `Parameter` objects with `location='body'`, and 
+        """Recursively walks `json_body` (the parsed JSON dictionary/list) up to a
+        depth of 10. Returns all keys as `Parameter` objects with `location='body'`, and
         keys whose values are the integers that receive `param_type='integer'`."""
 
         params = []
@@ -128,12 +187,16 @@ class ParameterEnumerator:
         if isinstance(json_body, dict):
             for key, value in json_body.items():
                 param_type = "integer" if isinstance(value, int) else "string"
-                params.append(Parameter(
-                    name=key,
-                    location="body",
-                    param_type=param_type,
-                    sample_value=str(value) if not isinstance(value, (dict, list)) else "",
-                ))
+                params.append(
+                    Parameter(
+                        name=key,
+                        location="body",
+                        param_type=param_type,
+                        sample_value=str(value)
+                        if not isinstance(value, (dict, list))
+                        else "",
+                    )
+                )
                 # Recurses into any nested objects or arrays to extract any deeper parameters.
                 if isinstance(value, (dict, list)):
                     params.extend(self._extract_json_params(value, _depth + 1))
@@ -164,16 +227,16 @@ class ParameterEnumerator:
             return FALLBACK_WORDLIST
 
     def fuzz_hidden_params(self, endpoint, session_kwargs=None):
-        """ Sends a baseline request to `endpoint`, and then probes each wordlist parameter
+        """Sends a baseline request to `endpoint`, and then probes each wordlist parameter
         name for a detectable response difference in the status code, body length, or
-        response time. Only fuzzes JSON endpoints, endpoints with fewer than 3 known parameters, 
+        response time. Only fuzzes JSON endpoints, endpoints with fewer than 3 known parameters,
         or endpoints whose URL matches a sensitive path such as '/admin', '/user', `/account`, or `/api`."""
 
         url = endpoint.url
         method = endpoint.method.upper()
         known_params = self.endpoint_params.get(url, [])
 
-        # Skips static assets and images that cannot carry any hidden parameters. 
+        # Skips static assets and images that cannot carry any hidden parameters.
         if url.lower().endswith(STATIC_ASSET_EXTENSIONS):
             logger.debug(f"Skipped static asset during fuzzing: {url}")
             return []
@@ -200,9 +263,9 @@ class ParameterEnumerator:
             start = time.time()
             # Issues a GET or POST baseline, depending on the endpoint method.
             if method == "GET":
-                baseline = self.http_client.get(url, **(session_kwargs or {}))
+                baseline, _ = self.http_client.get(url, **(session_kwargs or {}))
             else:
-                baseline = self.http_client.post(url, json={}, **(session_kwargs or {}))
+                baseline, _ = self.http_client.post(url, json_body={}, **(session_kwargs or {}))
             baseline_time = time.time() - start
         except Exception as exc:
             logger.warning(f"Baseline request failed for {url}: {exc}")
@@ -223,10 +286,10 @@ class ParameterEnumerator:
                 if method == "GET" or not is_json_endpoint:
                     separator = "&" if "?" in url else "?"
                     probe_url = f"{url}{separator}{param_name}=1"
-                    response = self.http_client.get(probe_url, **(session_kwargs or {}))
+                    response, _ = self.http_client.get(probe_url, **(session_kwargs or {}))
                 else:
-                    response = self.http_client.post(
-                        url, json={param_name: "1"}, **(session_kwargs or {})
+                    response, _ = self.http_client.post(
+                        url, json_body={param_name: "1"}, **(session_kwargs or {})
                     )
                 probe_time = time.time() - start
             except Exception as exc:
@@ -240,7 +303,9 @@ class ParameterEnumerator:
             # Calculates the boolean flags for status code, body length, and the response time differences against the baseline.
             status_changed = response.status_code != baseline_status
             length_delta = abs(len(response.content) - baseline_length)
-            length_changed = baseline_length > 0 and (length_delta / baseline_length) > 0.10
+            length_changed = (
+                baseline_length > 0 and (length_delta / baseline_length) > 0.10
+            )
             time_changed = probe_time > (baseline_time * 2) and probe_time > 1.0
 
             # Flags and records the parameter, if any measurable response difference was detected.
@@ -250,23 +315,28 @@ class ParameterEnumerator:
                     f"(status={response.status_code}, length={len(response.content)})"
                 )
                 location = "body" if (method != "GET" and is_json_endpoint) else "url"
-                discovered.append(Parameter(
-                    name=param_name,
-                    location=location,
-                    sample_value="1",
-                ))
+                discovered.append(
+                    Parameter(
+                        name=param_name,
+                        location=location,
+                        param_type="unknown",
+                        sample_value="1",
+                    )
+                )
 
         return discovered
 
     def _flag_id_parameters(self, params_list):
-        """ Iterates `params_list`, and sets `is_id_field=True` on any `Parameter`
+        """Iterates `params_list`, and sets `is_id_field=True` on any `Parameter`
         whose name matches the ID-like patterns in `ID_FIELD_PATTERNS`, or whose
         `sample_value` is purely numeric. Then returns the modified list."""
 
         # Iterates each parameter, and flags those with ID-like names or numeric sample values.
         for param in params_list:
             name_matches = bool(ID_FIELD_PATTERNS.search(param.name))
-            value_is_numeric = param.sample_value.isdigit() if param.sample_value else False
+            value_is_numeric = (
+                param.sample_value.isdigit() if param.sample_value else False
+            )
 
             # Sets `is_id_field` to True, if the name or value indicates a resource identifier.
             if name_matches or value_is_numeric:
@@ -274,7 +344,7 @@ class ParameterEnumerator:
         return params_list
 
     def enumerate_all(self, endpoints):
-        """ Iterates through `endpoints`, fetching each one to extract the URL, form, and JSON
+        """Iterates through `endpoints`, fetching each one to extract the URL, form, and JSON
         parameters, and then fuzzes for hidden parameters, flagging ID fields. Stores
         the combined `Parameter` list in `self.endpoint_params`, keyed by endpoint URL."""
 
@@ -286,7 +356,7 @@ class ParameterEnumerator:
             all_params.extend(self._extract_url_params(url))
 
             session_kwargs = {}
-            roles = list(self.config.credentials.keys())
+            roles = [c["role"] for c in self.config.credentials]
             # Uses the first configured role's session credentials for extraction requests.
             if roles:
                 try:
@@ -298,7 +368,7 @@ class ParameterEnumerator:
 
             # Fetches the endpoint to inspect its response body for form fields, or JSON keys.
             try:
-                response = self.http_client.get(url, **session_kwargs)
+                response, _ = self.http_client.get(url, **session_kwargs)
                 # Parses the response body based on whether it's a JSON, or HTML response.
                 if response is not None:
                     content_type = response.headers.get("content-type", "")
@@ -312,9 +382,7 @@ class ParameterEnumerator:
                             pass
                     # Extracts form fields when the endpoint returns a text/html page.
                     elif "text/html" in content_type:
-                        all_params.extend(
-                            self._extract_form_params(response.text, url)
-                        )
+                        all_params.extend(self._extract_form_params(response.text, url))
             except Exception as exc:
                 logger.debug(f"Failed to fetch {url} for parameter extraction: {exc}")
 
@@ -327,13 +395,13 @@ class ParameterEnumerator:
             logger.info(f"Enumerated {len(all_params)} parameters for {url}")
 
     def get_params(self):
-        """ Returns `self.endpoint_params` which is the dictionary of all extracted, and fuzzed
+        """Returns `self.endpoint_params` which is the dictionary of all extracted, and fuzzed
         parameters keyed by endpoint URL. Called after `enumerate_all` completes."""
 
         return self.endpoint_params
 
     def get_id_endpoints(self):
-        """ Filters `self.endpoint_params`, and returns only the URLs whose parameter
+        """Filters `self.endpoint_params`, and returns only the URLs whose parameter
         list contains at least one entry with `is_id_field=True`. Used by downstream
         IDOR and BOLA testing modules to identify high-value endpoints."""
 

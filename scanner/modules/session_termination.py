@@ -3,8 +3,8 @@
 
 Tests whether the session tokens are correctly invalidated after logout on Juice SHop and DVWA. For cookie-based
 targets, it replays the old credentials after logout to detect live sessions. For JWT-based targets, such as Juice
-Shop, it decodes the token  expiry claim and tests whether the server accepts an expired token, flagging the weak 
-token lifecycle enforcement. 
+Shop, it decodes the token  expiry claim and tests whether the server accepts an expired token, flagging the weak
+token lifecycle enforcement.
 """
 
 import copy
@@ -32,8 +32,7 @@ class SessionTerminationValidator:
         session_manager: SessionManager,
         comparator: ResponseComparator,
     ):
-        
-        """Stores the injected dependencies and initialises `self.findings` as an empty list for recording 
+        """Stores the injected dependencies and initialises `self.findings` as an empty list for recording
         `Vulnerability` objects found during session termination testing."""
 
         self.config = config
@@ -43,8 +42,8 @@ class SessionTerminationValidator:
         self.findings = []
 
     def _find_protected_endpoint(self, role):
-        """ Sends unauthenticated `GET` requests to the base URL, and common profile paths to find an endpoint
-        returning 200 for the given role. This returns the first URL that responds with 200, or None if none of 
+        """Sends unauthenticated `GET` requests to the base URL, and common profile paths to find an endpoint
+        returning 200 for the given role. This returns the first URL that responds with 200, or None if none of
         the paths succeed."""
 
         candidates = [
@@ -58,12 +57,12 @@ class SessionTerminationValidator:
         # Iterates over each candidate URL, and returns the first that responds with the status 200 for the assigned role.
         for url in candidates:
             try:
-                response = self.http_client.send_request("GET", url, session_key=role)[0]
+                response = self.http_client.send_request("GET", url, session_key=role)[
+                    0
+                ]
                 # Returns the URL immediately if the authenticated request confirms a 200 response.
                 if response is not None and response.status_code == 200:
-                    logger.debug(
-                        f"Protected endpoint confirmed for role {role}: {url}"
-                    )
+                    logger.debug(f"Protected endpoint confirmed for role {role}: {url}")
                     return url
             except Exception as exc:
                 logger.debug(
@@ -71,13 +70,11 @@ class SessionTerminationValidator:
                 )
                 continue
 
-        logger.warning(
-            f"No accessible protected endpoint found for role {role}."
-        )
+        logger.warning(f"No accessible protected endpoint found for role {role}.")
         return None
 
     def _find_logout_endpoint(self):
-        """ Sends unauthenticated `GET` requests to common logout paths,  to identify any server-side logout endpoints. Returns the
+        """Sends unauthenticated `GET` requests to common logout paths,  to identify any server-side logout endpoints. Returns the
         first path that produces a non-404 response, or None if there are no server-side logout endpoints existing on the target."""
 
         logout_candidates = [
@@ -100,9 +97,7 @@ class SessionTerminationValidator:
                     )
                     return url
             except Exception as exc:
-                logger.debug(
-                    f"Request to logout candidate {url} failed: {exc}"
-                )
+                logger.debug(f"Request to logout candidate {url} failed: {exc}")
                 continue
 
         logger.info(
@@ -112,7 +107,7 @@ class SessionTerminationValidator:
         return None
 
     def _decode_jwt_payload(self, token):
-        """ Decodes the base64-encoded payload segment of a JWT without any signature verification. Then returns
+        """Decodes the base64-encoded payload segment of a JWT without any signature verification. Then returns
         the payload as a dictionary, or an empty dictionary if decoding fails."""
 
         try:
@@ -135,7 +130,7 @@ class SessionTerminationValidator:
             return {}
 
     def _run_jwt_fallback(self, role, session_kwargs):
-        """ Returns the JWT-specific fallback tst when no server-side logout endpoints exist. Decodes the exp claim, waits for the expiry 
+        """Returns the JWT-specific fallback tst when no server-side logout endpoints exist. Decodes the exp claim, waits for the expiry
         if within 300 seconds, then retests the token. Flags Expired JWT Accepted or JWT Without Expiry findings accordingly."""
 
         # Extracts the raw JWT string from the Authorisation header stored in `session_kwargs`.
@@ -147,7 +142,7 @@ class SessionTerminationValidator:
             )
             return
 
-        token = auth_header[len("Bearer "):]
+        token = auth_header[len("Bearer ") :]
         payload = self._decode_jwt_payload(token)
 
         # Flags the token as having no expiry claim, if the decoded payload doesn't have an exp field.
@@ -168,9 +163,7 @@ class SessionTerminationValidator:
                 },
             )
             self.findings.append(vuln)
-            logger.warning(
-                f"JWT Without Expiry confirmed for role {role}."
-            )
+            logger.warning(f"JWT Without Expiry confirmed for role {role}.")
             return
 
         exp_timestamp = payload["exp"]
@@ -205,6 +198,7 @@ class SessionTerminationValidator:
 
         try:
             import requests as _requests
+
             replay_session = _requests.Session()
             replay_session.headers.update({"Authorization": f"Bearer {token}"})
             replay_response = replay_session.get(
@@ -245,7 +239,7 @@ class SessionTerminationValidator:
             )
 
     def test_logout_invalidation(self, role="user_a"):
-        """ Tests whether a session token, for the given role, remains usable after a logout. Deep-copies any pre-logout
+        """Tests whether a session token, for the given role, remains usable after a logout. Deep-copies any pre-logout
         credentials, sends the logout request, then replays the old credentials. Falls back to JWT-specific testing on
         Juice SHop."""
 
@@ -262,7 +256,9 @@ class SessionTerminationValidator:
 
         # Confirms that the protected endpoint returns 200, before performing the logout and replay sequence.
         try:
-            pre_logout_response = self.http_client.send_request("GET", protected_url, session_key=role)[0]
+            pre_logout_response = self.http_client.send_request(
+                "GET", protected_url, session_key=role
+            )[0]
         except Exception as exc:
             logger.warning(
                 f"Pre-logout request to {protected_url} failed for role {role}: {exc}"
@@ -295,15 +291,16 @@ class SessionTerminationValidator:
                 f"Logout request to {logout_url} failed for role {role}: {exc}"
             )
 
-        # Replays the old session credentials against the protected endpoint, after logout to test invalidation. 
+        # Replays the old session credentials against the protected endpoint, after logout to test invalidation.
         try:
             import requests as _requests
+
             replay_session = _requests.Session()
 
             old_headers = old_session_kwargs.get("headers", {})
             old_cookies = old_session_kwargs.get("cookies", {})
 
-            # Applies all the header, and cookies, from the pre-logout credentials to the replay session. 
+            # Applies all the header, and cookies, from the pre-logout credentials to the replay session.
             if old_headers:
                 replay_session.headers.update(old_headers)
             if old_cookies:
@@ -328,7 +325,7 @@ class SessionTerminationValidator:
             return
 
         status = post_logout_response.status_code
-        # LOgs a pass result, if the server returns an authentication error or login redirect. 
+        # LOgs a pass result, if the server returns an authentication error or login redirect.
         if status in (401, 403) or (
             status in (301, 302)
             and "login" in post_logout_response.headers.get("Location", "").lower()
@@ -348,7 +345,9 @@ class SessionTerminationValidator:
         sensitive_fields = self.comparator.extract_sensitive_fields(body_json)
 
         # Creates, and appends, a 'Session Not Invalidated on Logout' vulnerability, if the server returned 200 with user data.
-        if status == 200 and (sensitive_fields or len(post_logout_response.content) > 200):
+        if status == 200 and (
+            sensitive_fields or len(post_logout_response.content) > 200
+        ):
             vuln = Vulnerability(
                 vuln_type="Session Not Invalidated on Logout",
                 severity="Medium",
@@ -373,12 +372,13 @@ class SessionTerminationValidator:
             )
 
     def test_all_roles(self):
-        """ Runs `test_logout_invalidation` for every non-admin role defined in `config.credentials`, covering all standard test
+        """Runs `test_logout_invalidation` for every non-admin role defined in `config.credentials`, covering all standard test
         accounts on Juice Shop DVWA."""
 
         # Extracts role names from the credentials list, excluding the admin role prior to testing.
         roles = [
-            cred["role"] for cred in self.config.credentials
+            cred["role"]
+            for cred in self.config.credentials
             if cred.get("role") != "admin"
         ]
 
@@ -391,5 +391,5 @@ class SessionTerminationValidator:
             self.test_logout_invalidation(role=role)
 
     def get_findings(self):
-        """ Returns the completed list of `Vulnerability` objects, recorded during session termination testing."""
+        """Returns the completed list of `Vulnerability` objects, recorded during session termination testing."""
         return self.findings

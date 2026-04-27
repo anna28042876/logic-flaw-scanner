@@ -1,0 +1,15 @@
+
+╔══════════════════════════════════════════════════════════════╗
+║          Logic Flaw Scanner  v1.0.0                          ║
+║          Semi-Automated Web Vulnerability Discovery          ║
+╠══════════════════════════════════════════════════════════════╣
+║  Target   : http://localhost:3000                            ║
+║  Roles    : 3                                                ║
+║  Started  : 2026-04-27 14:27:51 UTC                          ║
+╚══════════════════════════════════════════════════════════════╝
+        
+  Target : http://localhost:3000
+  WARNING: Only scan systems you have explicit written authorisation to test.
+  Scanning without permission may be illegal under the Computer Misuse Act 1990.
+
+  Do you have authorisation to scan this target? [y/N]: 

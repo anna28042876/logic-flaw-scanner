@@ -2,7 +2,7 @@
 `session_fixation.py`
 
 Tests for any session fixation vulnerabilities on Juice Shop and DVWA. For cookie-based targets, e.g., DVWA, it compares
-the PHPSESSID before, and after, authentication to detect unregenerated session IDs. For JWT-bassed targets such as Juice SHop, 
+the PHPSESSID before, and after, authentication to detect unregenerated session IDs. For JWT-bassed targets such as Juice SHop,
 it authenticates twice, then verifies that the server issues distinct tokens, rather than just reusing the same one.
 """
 
@@ -17,10 +17,10 @@ logger = get_logger(__name__)
 
 
 class SessionFixationTester:
-    """ Tests session ID regenerations on DVWA, and JWT atomity on Juice Shop, post-authentication."""
-    
+    """Tests session ID regenerations on DVWA, and JWT atomity on Juice Shop, post-authentication."""
+
     def __init__(self, config, http_client: HTTPClient):
-        """ Stores `config`, and `http_client`, then initialises `self.findings` as an empty list for recording `Vulnerability` objects 
+        """Stores `config`, and `http_client`, then initialises `self.findings` as an empty list for recording `Vulnerability` objects
         found during session fixation testing."""
 
         self.config = config
@@ -28,25 +28,34 @@ class SessionFixationTester:
         self.findings = []
 
     def _get_login_url(self):
-        """ Resolves the login endpoint URL from `config.login_config`. Prepends `config.target_url` if the stored value
+        """Resolves the login endpoint URL from `config.login_config`. Prepends `config.target_url` if the stored value
         is a relative path, returning a fully qualified URL string."""
 
-        raw = self.config.login_config.get("url", "")
+        raw = self.config.login_config.get("login_url", "")
         # Prepends the target base URL, when the login URL stored in `config` is a relative path.
         if raw.startswith("/"):
             return self.config.target_url.rstrip("/") + raw
         return raw
 
     def _get_session_cookie_name(self):
-        """ Sends a GET request to the target login page using a fresh `requests.Session`, and inspects the response cookies. Then returns
+        """Sends a GET request to the target login page using a fresh `requests.Session`, and inspects the response cookies. Then returns
         the name of the first recognised session cookie, or NOne, if no known session cookie is present on the target."""
 
-        known_names = ["PHPSESSID", "sessionid", "JSESSIONID", "connect.sid", "token", "session"]
+        known_names = [
+            "PHPSESSID",
+            "sessionid",
+            "JSESSIONID",
+            "connect.sid",
+            "token",
+            "session",
+        ]
         login_url = self._get_login_url()
 
         # Skips cookie detection if no login URL can be resolved from `config`.
         if not login_url:
-            logger.warning("No login URL found in `config.login_config`, cannot detect session cookie.")
+            logger.warning(
+                "No login URL found in `config.login_config`, cannot detect session cookie."
+            )
             return None
 
         try:
@@ -62,7 +71,9 @@ class SessionFixationTester:
                     logger.debug(f"Session cookie detected on target: {cookie_name}")
                     return cookie_name
         except Exception as exc:
-            logger.warning(f"GET request to login page {login_url} failed during cookie detection: {exc}")
+            logger.warning(
+                f"GET request to login page {login_url} failed during cookie detection: {exc}"
+            )
 
         logger.info(
             "No recognised session cookie found on target. "
@@ -71,8 +82,8 @@ class SessionFixationTester:
         return None
 
     def _authenticate_fresh(self, role="user_a"):
-        """ Performs a direct POST to the login endpoint using the credentials from `config` for the specified role. Then tries 
-        JSON and form-encoded formats. Then returns the raw JWT string, if found in the response body or headers, or None if 
+        """Performs a direct POST to the login endpoint using the credentials from `config` for the specified role. Then tries
+        JSON and form-encoded formats. Then returns the raw JWT string, if found in the response body or headers, or None if
         authentication fails."""
         login_url = self._get_login_url()
         # Finds the matching credential dict from the credentials list by role field.
@@ -104,8 +115,12 @@ class SessionFixationTester:
                     response = fresh_session.post(
                         login_url,
                         data={
-                            self.config.login_config.get("username_field", "email"): username,
-                            self.config.login_config.get("password_field", "password"): password,
+                            self.config.login_config.get(
+                                "username_field", "email"
+                            ): username,
+                            self.config.login_config.get(
+                                "password_field", "password"
+                            ): password,
                         },
                         timeout=10,
                         verify=self.config.verify_ssl,
@@ -114,7 +129,7 @@ class SessionFixationTester:
                 # Skips to the next attempt format if the server rejected the credentials.
                 if response.status_code not in (200, 201):
                     continue
-                
+
                 # Tries to extract the JWT from common Juice SHop response body locations.
                 try:
                     body = response.json()
@@ -131,18 +146,20 @@ class SessionFixationTester:
                 # Falls back to checking the Authorisation response header, if no token was found in the body.
                 auth_header = response.headers.get("Authorization", "")
                 if auth_header.startswith("Bearer "):
-                    return auth_header[len("Bearer "):]
+                    return auth_header[len("Bearer ") :]
 
             except Exception as exc:
-                logger.debug(f"Fresh authentication attempt ({attempt}) for role {role} failed: {exc}")
+                logger.debug(
+                    f"Fresh authentication attempt ({attempt}) for role {role} failed: {exc}"
+                )
                 continue
 
         logger.warning(f"Fresh authentication returned no token for role {role}.")
         return None
 
     def _run_jwt_reuse_test(self):
-        """ Authenticates twice with the same `user_a` credentials, to capture `token_A`, and `token_B`. Flags a security concern
-        if both tokens are identical. COnfiirms that `token_A` still grants access to a protected endpoint, logging the result as 
+        """Authenticates twice with the same `user_a` credentials, to capture `token_A`, and `token_B`. Flags a security concern
+        if both tokens are identical. COnfiirms that `token_A` still grants access to a protected endpoint, logging the result as
         a PASS, or an informational finding."""
 
         logger.info(
@@ -178,9 +195,13 @@ class SessionFixationTester:
                 },
             )
             self.findings.append(vuln)
-            logger.warning("JWT Token Reuse confirmed: both authentication calls returned the same token.")
+            logger.warning(
+                "JWT Token Reuse confirmed: both authentication calls returned the same token."
+            )
         else:
-            logger.info("PASS: Server issued distinct JWT tokens for separate authentication calls.")
+            logger.info(
+                "PASS: Server issued distinct JWT tokens for separate authentication calls."
+            )
 
         # Verifies that `token_A` still grants access to a protected endpoint, after `token_B` has been issued.
         protected_candidates = [
@@ -210,10 +231,12 @@ class SessionFixationTester:
                 logger.debug(f"token_A replay request to {url} failed: {exc}")
                 continue
 
-        logger.info("token_A replay test inconclusive: no candidate protected endpoint returned 200.")
+        logger.info(
+            "token_A replay test inconclusive: no candidate protected endpoint returned 200."
+        )
 
     def test_fixation(self):
-        """ Dispatches to the JWT reuse test if no session cookie exists on the target, or runs the usual PHPSESSID fixation test
+        """Dispatches to the JWT reuse test if no session cookie exists on the target, or runs the usual PHPSESSID fixation test
         for DVWA, by comparing session IDs prior, and post, authentication within the same `requests.Session`."""
 
         cookie_name = self._get_session_cookie_name()
@@ -235,12 +258,14 @@ class SessionFixationTester:
         fixation_session = requests.Session()
         try:
             fixation_session.get(
-            login_url,
-            timeout=10,
-            verify=self.config.verify_ssl,
-        )
+                login_url,
+                timeout=10,
+                verify=self.config.verify_ssl,
+            )
         except Exception as exc:
-            logger.warning(f"GET to login page {login_url} failed during fixation test: {exc}")
+            logger.warning(
+                f"GET to login page {login_url} failed during fixation test: {exc}"
+            )
             return
 
         pre_auth_id = fixation_session.cookies.get(cookie_name)
@@ -260,14 +285,20 @@ class SessionFixationTester:
             fixation_session.post(
                 login_url,
                 data={
-                    self.config.login_config.get("username_field", "username"): username,
-                    self.config.login_config.get("password_field", "password"): password,
+                    self.config.login_config.get(
+                        "username_field", "username"
+                    ): username,
+                    self.config.login_config.get(
+                        "password_field", "password"
+                    ): password,
                 },
                 timeout=10,
                 verify=self.config.verify_ssl,
             )
         except Exception as exc:
-            logger.warning(f"POST login to {login_url} failed during fixation test: {exc}")
+            logger.warning(
+                f"POST login to {login_url} failed during fixation test: {exc}"
+            )
             return
 
         # Extracts the session cookie from the same session after authentication, to capture the post-login ID.
@@ -307,5 +338,5 @@ class SessionFixationTester:
             )
 
     def get_findings(self):
-       # Returns the complete list of `Vulnerability` objects,, recorded during the session fixation testing.
+        # Returns the complete list of `Vulnerability` objects,, recorded during the session fixation testing.
         return self.findings

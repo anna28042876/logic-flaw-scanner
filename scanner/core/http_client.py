@@ -3,7 +3,7 @@
 import copy
 import time
 import urllib3
-from datetime import datetime
+from datetime import datetime, UTC
 
 import requests
 import requests.exceptions
@@ -25,7 +25,7 @@ DEFAULT_USER_AGENT = (
 
 
 class HTTPClient:
-    # Central HTTP abstraction for the scanner. 
+    # Central HTTP abstraction for the scanner.
     # Every request from the module (Auth, crawling, IDOR testing, etc.,) flows through here.
     # Thius ensures consistent handling of throttling, logging, retries, and session isolation.
 
@@ -75,7 +75,7 @@ class HTTPClient:
         timeout=30,
         session_key: str = "default",
     ):
-        # GLobal throttling to prevent overwhelming the target. 
+        # GLobal throttling to prevent overwhelming the target.
         # This is important for realism but also to avoid rate-limiting during scans.
         time.sleep(self.throttle_delay)
 
@@ -83,7 +83,7 @@ class HTTPClient:
         session = self.sessions.get(session_key, self.sessions["default"])
 
         try:
-            # Core HTTP execution point used by all the scanner modules. 
+            # Core HTTP execution point used by all the scanner modules.
             response = session.request(
                 method,
                 url,
@@ -97,7 +97,7 @@ class HTTPClient:
             )
 
             # Structured logging for later vulnerability analysis and reporting.
-            #Includes truncated response bodies to keep memory usage manageable.
+            # Includes truncated response bodies to keep memory usage manageable.
             log_entry = {
                 "method": method,
                 "url": url,
@@ -108,7 +108,7 @@ class HTTPClient:
                 "response_body": response.text[:5000],
                 "response_length": len(response.content),
                 "elapsed_ms": response.elapsed.total_seconds() * 1000,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
             # Persists request/response pairs for full scan traceability.
@@ -138,7 +138,7 @@ class HTTPClient:
         backoff_factor: float = 1.0,
         **kwargs,
     ):
-        # Retry wrapper used by higher-level modules when stability is required. 
+        # Retry wrapper used by higher-level modules when stability is required.
         # Implements exponential backoffs to handle unreliable endpoints or rate-limiting.
         last_result = (None, {"error": "No attempts made", "url": url})
 
@@ -150,8 +150,10 @@ class HTTPClient:
                 return (response, log_entry)
 
             # Backoffs increase per attempt (1s, 2s, 4s, etc., by default).
-            wait = backoff_factor * (2 ** attempt)
-            logger.warning(f"Attempt {attempt + 1}/{max_retries} failed for {url} - retrying in {wait}s")
+            wait = backoff_factor * (2**attempt)
+            logger.warning(
+                f"Attempt {attempt + 1}/{max_retries} failed for {url} - retrying in {wait}s"
+            )
             time.sleep(wait)
             last_result = (response, log_entry)
 
@@ -160,21 +162,28 @@ class HTTPClient:
         return last_result
 
     def get(self, path: str, **kwargs):
-        # Convenience wrapped that is used throughout the scanner to build full URLs from paths. 
-        # This keeps code calling clean (modules don't need to know about the base URL handling).
-        url = self.config.target_url.rstrip("/") + "/" + path.lstrip("/")
+        # Convenience wrapper that builds full URLs from relative paths.
+        # Passes absolute URLs through unchanged, so callers can use either format.
+        if path.startswith("http://") or path.startswith("https://"):
+            url = path
+        else:
+            url = self.config.target_url.rstrip("/") + "/" + path.lstrip("/")
         return self.send_request("GET", url, **kwargs)
 
     def post(self, path: str, **kwargs):
         # Same abstraction as `GET` but for `POST` requests.
-        url = self.config.target_url.rstrip("/") + "/" + path.lstrip("/")
+        # Passes absolute URLs through unchanged, so callers can use either format.
+        if path.startswith("http://") or path.startswith("https://"):
+            url = path
+        else:
+            url = self.config.target_url.rstrip("/") + "/" + path.lstrip("/")
         return self.send_request("POST", url, **kwargs)
 
     def get_full_log(self):
-        # Returns a deep copy to protect internal states. 
+        # Returns a deep copy to protect internal states.
         # Used by reporting/export modules at the end of a scan.
         return copy.deepcopy(self.request_log)
 
     def get_request_count(self) -> int:
-        # Useful for metrics, progress tracking, and scan summaries. 
+        # Useful for metrics, progress tracking, and scan summaries.
         return len(self.request_log)

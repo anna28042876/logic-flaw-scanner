@@ -1,7 +1,7 @@
 """
 `main.py`
 
-The top-level orchestrator for the full logic flaw scanner. Loads `ScanConfig`, constructs all the module 
+The top-level orchestrator for the full logic flaw scanner. Loads `ScanConfig`, constructs all the module
 instances, and runs the full scan pipeline in ordered sequence. Exposes a CLI via `argparse`. Each module step runs inside
 its own error boundary, so that a single module crash does not discard any findings that were accumulated via earlier modules.
 """
@@ -43,13 +43,15 @@ SCANNER_VERSION = "1.0.0"
 
 
 class Scanner:
-    """ Loads config, constructs all module instances, and runs the full pipeline. Findings from all the modules
+    """Loads config, constructs all module instances, and runs the full pipeline. Findings from all the modules
     are aggregated into a single `ScanResult`, and written to HTML, and JSON reports."""
 
-    def __init__(self, config_path, output_dir="reports/", modules="all", verbose=False):
-        """ Loads, and validates `ScanConfig`, configures the logger, and instantiates all the shared core components. 
+    def __init__(
+        self, config_path, output_dir="reports/", modules="all", verbose=False
+    ):
+        """Loads, and validates `ScanConfig`, configures the logger, and instantiates all the shared core components.
         Parses the `modules` string into a set for `_should_run`, to query throughout the scan pipeline."""
-        
+
         # Loads the YAML config file, via `ScanConfig`, and immediately validates required fields.
         self.config = ScanConfig(config_path)
         self.config.validate()
@@ -79,13 +81,15 @@ class Scanner:
             self.modules = {m.strip().lower() for m in modules.split(",")}
 
     def _print_banner(self):
-        """ Prints an ASCII banner showing the scanner name, version, target URL, number of configured credential sets, 
+        """Prints an ASCII banner showing the scanner name, version, target URL, number of configured credential sets,
         and the UTC scan start timestamp."""
 
-        # COunts the number of credential sets to display how many roles the scanner will authenticate. 
-        credential_count = len(self.config.credentials) if self.config.credentials else 0
+        # COunts the number of credential sets to display how many roles the scanner will authenticate.
+        credential_count = (
+            len(self.config.credentials) if self.config.credentials else 0
+        )
         # Formats the current UTC time as a readable string.
-        timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
         # Builds the full banner string, using f-string formatting with left-padded fields.
         banner = f"""
@@ -101,7 +105,7 @@ class Scanner:
         print(banner)
 
     def _should_run(self, module_name):
-        """ Returns 'True' when the module named `module_name` is included in the scan run, either because `self.modules` is set 
+        """Returns 'True' when the module named `module_name` is included in the scan run, either because `self.modules` is set
         to the sentinel value 'all', or because `module_name` is present in the parsed module set."""
 
         # Returns 'True' immediately, when all modules are selected, avoiding a set membership check.
@@ -111,8 +115,8 @@ class Scanner:
         return module_name in self.modules
 
     def run(self):
-        """ Runs the full scan pipeline, executing authentication, crawling, parameter enumeration, authorisation testing, workflow
-        bypass, and rate limiting modules in sequence. Each step is enclosed in an error boundary, so that a crash in one module 
+        """Runs the full scan pipeline, executing authentication, crawling, parameter enumeration, authorisation testing, workflow
+        bypass, and rate limiting modules in sequence. Each step is enclosed in an error boundary, so that a crash in one module
         does not automatically discard the findings from all prior modules."""
 
         self._print_banner()
@@ -120,12 +124,20 @@ class Scanner:
         ## Pre-Scan Authorisation Gate.
         # Displays the target URL, and requires explicit operator confirmation, before any requests are sent.
         print(f"  Target : {self.config.target_url}")
-        print("  WARNING: Only scan systems you have explicit written authorisation to test.")
-        print("  Scanning without permission may be illegal under the Computer Misuse Act 1990.\n")
+        print(
+            "  WARNING: Only scan systems you have explicit written authorisation to test."
+        )
+        print(
+            "  Scanning without permission may be illegal under the Computer Misuse Act 1990.\n"
+        )
 
         # Reads operator input, falling back to an empty string if stdin is non-interactive, which causes an abort.
         try:
-            confirmation = input("  Do you have authorisation to scan this target? [y/N]: ").strip().lower()
+            confirmation = (
+                input("  Do you have authorisation to scan this target? [y/N]: ")
+                .strip()
+                .lower()
+            )
         except EOFError:
             confirmation = ""
 
@@ -137,12 +149,12 @@ class Scanner:
         print()
 
         # Records the UTC scan start time, before any modules run, so that the duration can be calculated at the end.
-        scan_start = datetime.datetime.utcnow()
+        scan_start = datetime.datetime.now(datetime.UTC)
         # Initialises the master findings list that all modules append their `Vulnerability` objects into.
         all_findings = []
         # Tracks which module tokens were actually executed, written into `ScanResult.modules_run`.
         modules_run = []
-        
+
         ## Authentication
         # Authenticates all configured roles before any module runs. Aborts if there are no sessions established.
         logger.info("Step: Authentication.")
@@ -151,7 +163,7 @@ class Scanner:
             auth_results = self.session_manager.authenticate_all()
             logger.info("Authentication results: %s", auth_results)
 
-            # Treats an empty results dictionary as a fatal error, because all the subsequent modules require at least one session. 
+            # Treats an empty results dictionary as a fatal error, because all the subsequent modules require at least one session.
             if not auth_results:
                 logger.error("Authentication produced no sessions. Aborting scan.")
                 sys.exit(1)
@@ -213,7 +225,7 @@ class Scanner:
                     "Module `crawler.py` raised an unhandled exception.\n%s",
                     traceback.format_exc(),
                 )
-                
+
                 # Records a scanner error finding, so that the crash is visible in the final report, rather than getting unnoticeably lost.
                 all_findings.append(
                     Vulnerability(
@@ -229,7 +241,9 @@ class Scanner:
         ## SPA Crawl
         # Runs the Playwright SPA crawler against Juice Shop's Angular frontend, and merges any new endpoints.
         # Gated on both the 'crawl' module token, and the `handle_spa` flag in `crawl_config`, defaulting to 'True'.
-        if self._should_run("crawl") and self.config.crawl_config.get("handle_spa", True):
+        if self._should_run("crawl") and self.config.crawl_config.get(
+            "handle_spa", True
+        ):
             logger.info("Step: SPA crawling.")
             try:
                 # Constructs `SPACrawler`, which uses Playwright Chromium to intercept XHR, and Fetch API calls.
@@ -293,7 +307,7 @@ class Scanner:
                 endpoint_params = param_enumerator.get_params()
                 # Sums the parameter count across all endpoints for the `ScanResult` metrics field.
                 parameters_found = sum(len(v) for v in endpoint_params.values())
-                
+
                 logger.info(
                     "Parameter enumeration found %d parameters across %d endpoints.",
                     parameters_found,
@@ -359,7 +373,6 @@ class Scanner:
         ## Session Testing.
         # Groups the session termination, and session fixation, under the same 'session' token, to keep CLI flags simple.
         if self._should_run("session"):
-
             # Tests for logout invalidation for all the configured roles, and the JWT expiry fallback for Juice Shop.
             logger.info("Step: Session termination testing.")
             modules_run.append("session")
@@ -630,7 +643,7 @@ class Scanner:
 
         ## Builds ScanResult
         # Records the scan end time, after all modules have completed, or individually failed.
-        scan_end = datetime.datetime.utcnow()
+        scan_end = datetime.datetime.now(datetime.UTC)
 
         # Calculates total elapsed seconds as a float, for the `ScanResult.scan_duration_seconds` field.
         duration = (scan_end - scan_start).total_seconds()
@@ -660,14 +673,18 @@ class Scanner:
         # Generates both the HTML, and JSON reports, from the completed `ScanResult`, and `EvidenceCollector`.
         try:
             # Passes `evidence_collector` so that the HTML template can render collapsible request, and response panels.
-            HTMLReportGenerator(scan_result, self.evidence_collector).generate(html_path)
+            HTMLReportGenerator(scan_result, self.evidence_collector).generate(
+                html_path
+            )
             logger.info("HTML report written to %s.", html_path)
         except Exception:
             logger.error("HTML report generation failed.\n%s", traceback.format_exc())
 
         try:
             # Passes `evidence_collector`, so that the JSON report embeds the full sanitised evidence store.
-            JSONReportGenerator(scan_result, self.evidence_collector).generate(json_path)
+            JSONReportGenerator(scan_result, self.evidence_collector).generate(
+                json_path
+            )
             logger.info("JSON report written to %s.", json_path)
         except Exception:
             logger.error("JSON report generation failed.\n%s", traceback.format_exc())
@@ -706,7 +723,7 @@ class Scanner:
 
 
 def main():
-    """ Parses CLI arguments, builds a `Scanner` instance, and calls `scanner.run()`. 
+    """Parses CLI arguments, builds a `Scanner` instance, and calls `scanner.run()`.
     Handles `KeyboardInterrupt` with a clean exit message."""
 
     # Constructs the argument parser with a plain-text description shown in `--help` output.
@@ -785,6 +802,7 @@ def main():
     except KeyboardInterrupt:
         print("\n[!] Scan interrupted by user (Ctrl+C). Exiting cleanly.")
         sys.exit(0)
+
 
 # Ensures that `main()` is only called when the file is directly executed, and not just imported as a module.
 if __name__ == "__main__":

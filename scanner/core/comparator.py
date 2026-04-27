@@ -3,8 +3,8 @@
 
 Core comparison and analysis logic for HTTP responses within the scanner.
 
-Responsible for identifying meaningful differences between responses generated 
-under different contexts (the differing user roles, for example) in order to 
+Responsible for identifying meaningful differences between responses generated
+under different contexts (the differing user roles, for example) in order to
 detect potential vulnerabilities such as the IDOR vulnerability and data leakages.
 
 Provides structural comparison (status codes, body lengths, similarities), JSON-aware
@@ -45,7 +45,7 @@ class ResponseComparator:
 
     @staticmethod
     def compare_body_length(resp_a, resp_b, threshold=0.1):
-        """ Compares response body sizes to detect significant differences.
+        """Compares response body sizes to detect significant differences.
         A small percentage threshold is also used instead of exact matching to account
         for dynamic content such as timestamps, tokens, etc.,"""
         len_a = len(resp_a.content)
@@ -65,8 +65,9 @@ class ResponseComparator:
 
     @staticmethod
     def compare_json_keys(json_a, json_b):
-        """Recursively extract all the JSON keys (including any nested ones) to compare 
+        """Recursively extract all the JSON keys (including any nested ones) to compare
         the structures rather than just the raw content."""
+
         def extract_keys(obj, prefix=""):
             keys = set()
 
@@ -88,7 +89,7 @@ class ResponseComparator:
         keys_a = extract_keys(json_a)
         keys_b = extract_keys(json_b)
 
-        # Return a structure difference of key presence. 
+        # Return a structure difference of key presence.
         return {
             "keys_only_in_a": keys_a - keys_b,
             "keys_only_in_b": keys_b - keys_a,
@@ -103,12 +104,23 @@ class ResponseComparator:
 
     @staticmethod
     def extract_sensitive_fields(json_body, patterns=None):
-        # Identifies potentially sensitive fields in a JSON structure. 
+        # Identifies potentially sensitive fields in a JSON structure.
         # Overall heuristic approach based on common naming conventions.
         if patterns is None:
             patterns = [
-                "email", "name", "phone", "address", "ssn", "password",
-                "token", "secret", "balance", "account", "card", "dob", "salary",
+                "email",
+                "name",
+                "phone",
+                "address",
+                "ssn",
+                "password",
+                "token",
+                "secret",
+                "balance",
+                "account",
+                "card",
+                "dob",
+                "salary",
             ]
 
         found = {}
@@ -118,10 +130,12 @@ class ResponseComparator:
             if isinstance(obj, dict):
                 for k, v in obj.items():
                     # Case-insensitive regex match against known sensitive patterns.
-                    if any(re.search(pattern, k, re.IGNORECASE) for pattern in patterns):
+                    if any(
+                        re.search(pattern, k, re.IGNORECASE) for pattern in patterns
+                    ):
                         found[k] = v
                     walk(v)
-                    
+
             elif isinstance(obj, list):
                 for item in obj:
                     walk(item)
@@ -147,9 +161,7 @@ class ResponseComparator:
         """Fast-path detection where if a known identifier from Role A appears in Role B's response
         this is a strong identifier of a leak."""
         if role_a_identifier and role_a_identifier in resp_b_body:
-            reason = (
-                f"Role A identifier '{role_a_identifier}' found in role B response body."
-            )
+            reason = f"Role A identifier '{role_a_identifier}' found in role B response body."
             logger.warning(reason)
             return True, reason
 
@@ -159,14 +171,18 @@ class ResponseComparator:
             fields_b = self.extract_sensitive_fields(json_b)
 
             # Identifies fields that exist in both responses with identical values.
-            leaked = {k: v for k, v in fields_a.items() if k in fields_b and fields_b[k] == v}
+            leaked = {
+                k: v for k, v in fields_a.items() if k in fields_b and fields_b[k] == v
+            }
 
             if leaked:
-                reason = f"Sensitive fields present in both responses: {list(leaked.keys())}"
+                reason = (
+                    f"Sensitive fields present in both responses: {list(leaked.keys())}"
+                )
                 logger.warning(reason)
                 return True, reason
 
-        # No evidence of leaks found. 
+        # No evidence of leaks found.
         return False, "No data leak found."
 
     def is_access_granted(self, response):
@@ -192,7 +208,7 @@ class ResponseComparator:
         if any(phrase in body_lower for phrase in denial_strings):
             return False
 
-        # Ensures that the response has enough content to be meaningful. 
+        # Ensures that the response has enough content to be meaningful.
         if len(response.content) < self.MIN_CONTENT_LENGTH:
             return False
 

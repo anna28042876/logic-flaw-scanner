@@ -20,11 +20,11 @@ class SPACrawler:
     # Playwright-based crawler for Javascript-rendered SPAs.
 
     def __init__(self, config, session_manager, scope_enforcer):
-        """ Stores `config`, `session_manager`, and `scope_enforcer` for use across
+        """Stores `config`, `session_manager`, and `scope_enforcer` for use across
         all crawl methods. Initialises `self.api_calls`, and
         `self.discovered_endpoints` as empty lists, so they're ready for population by
-        `crawl_with_browser`. """
-        
+        `crawl_with_browser`."""
+
         self.config = config
         self.session_manager = session_manager
         self.scope_enforcer = scope_enforcer
@@ -40,7 +40,7 @@ class SPACrawler:
         page.on("response", self._on_response)
 
     def _on_request(self, request):
-        """ Executed on every outgoing browser request. Logs any in-scope URLs and appends
+        """Executed on every outgoing browser request. Logs any in-scope URLs and appends
         XHR, and Fetch calls (Juice Shop's Angular API traffic) to `self.api_calls`
         as dictionaries containing url, method, headers, and post_data."""
 
@@ -50,15 +50,17 @@ class SPACrawler:
             logger.debug(f"Intercepted request: {request.method} {url}")
             # Captures only XHR and Fetch calls, ignoring static assets.
             if request.resource_type in ["xhr", "fetch"]:
-                self.api_calls.append({
-                    "url": url,
-                    "method": request.method,
-                    "headers": dict(request.headers),
-                    "post_data": request.post_data,
-                })
+                self.api_calls.append(
+                    {
+                        "url": url,
+                        "method": request.method,
+                        "headers": dict(request.headers),
+                        "post_data": request.post_data,
+                    }
+                )
 
     def _on_response(self, response):
-        """ Executes on every incoming browser response. Logs status codes, and
+        """Executes on every incoming browser response. Logs status codes, and
         content-types for any URLs already captured in `self.api_calls`, giving
         visibility into what Juice Shop returns for each intercepted API call."""
 
@@ -70,7 +72,7 @@ class SPACrawler:
             logger.debug(f"API response: {response.status} {content_type} {url}")
 
     def _convert_cookies_for_playwright(self, cookies_dict, target_url):
-        """ Converts the `{name: value}` cookies dictionary returned by `session_manager`
+        """Converts the `{name: value}` cookies dictionary returned by `session_manager`
         into Playwright's required list-of-dictionaries format, using the target domain
         and root path. Used for form-based auth targets such as DVWA."""
 
@@ -85,7 +87,7 @@ class SPACrawler:
         ]
 
     def crawl_with_browser(self, role=None):
-        """ Launches headless Chromium, injects credentials for the given `role`
+        """Launches headless Chromium, injects credentials for the given `role`
         (Authorization header for Juice Shop bearer auth, context cookies for
         DVWA form auth), clicks all safe interactive elements, and records unique
         SPA routes visited. Then populates `self.api_calls` and
@@ -93,8 +95,16 @@ class SPACrawler:
 
         # Destrucive action keywords whose matching elements are skipped to prevent irreversible state changes on JS or DVWA during discoveru.
         destructive_keywords = [
-            "delete", "remove", "cancel", "logout", "sign out",
-            "deactivate", "destroy", "reset", "clear all", "unsubscribe",
+            "delete",
+            "remove",
+            "cancel",
+            "logout",
+            "sign out",
+            "deactivate",
+            "destroy",
+            "reset",
+            "clear all",
+            "unsubscribe",
         ]
 
         target_url = self.config.target_url
@@ -105,7 +115,7 @@ class SPACrawler:
             context = browser.new_context()
             page = context.new_page()
 
-            # Injects role credentials into the browser context prior to crawling. 
+            # Injects role credentials into the browser context prior to crawling.
             if role is not None:
                 session_kwargs = self.session_manager.get_session_kwargs(role)
                 auth_type = self.config.login_config.get("type", "form")
@@ -181,7 +191,7 @@ class SPACrawler:
         self.discovered_endpoints = self.get_api_endpoints()
 
     def get_api_endpoints(self):
-        """ Converts each entry in `self.api_calls` into an `Endpoint` dataclass, and
+        """Converts each entry in `self.api_calls` into an `Endpoint` dataclass, and
         returns the full list. Called after `crawl_with_browser` to hand the discovered
         Juice Shop API endpoints to the rest of the scanner pipeline."""
 

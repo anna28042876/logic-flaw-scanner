@@ -1,0 +1,373 @@
+{
+    "metadata": {
+        "scanner_version": "1.0.0",
+        "scan_id": "",
+        "target_url": "http://localhost:3000",
+        "scan_start": "2026-04-24T13:26:46.907214",
+        "scan_end": "2026-04-24T13:26:52.797199",
+        "duration_seconds": 5.889985,
+        "total_endpoints": 0,
+        "total_parameters": 0,
+        "total_requests": 35,
+        "total_findings": 26
+    },
+    "findings": [
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/api/Products",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 13212 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 13212,
+                "final_url": "http://localhost:3000/api/Products"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/api/Products/",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 13212 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 13212,
+                "final_url": "http://localhost:3000/api/Products/"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/api/Feedbacks",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 1734 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 1734,
+                "final_url": "http://localhost:3000/api/Feedbacks"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/api/Feedbacks/",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 1734 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 1734,
+                "final_url": "http://localhost:3000/api/Feedbacks/"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/api/Challenges",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 59604 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 59604,
+                "final_url": "http://localhost:3000/api/Challenges"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/api/Challenges/",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 59604 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 59604,
+                "final_url": "http://localhost:3000/api/Challenges/"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/api/SecurityQuestions",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 1934 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 1934,
+                "final_url": "http://localhost:3000/api/SecurityQuestions"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/api/SecurityQuestions/",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 1934 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 1934,
+                "final_url": "http://localhost:3000/api/SecurityQuestions/"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/api/Quantitys",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 6258 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 6258,
+                "final_url": "http://localhost:3000/api/Quantitys"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/api/Quantitys/",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 6258 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 6258,
+                "final_url": "http://localhost:3000/api/Quantitys/"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/rest/products/search",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 13644 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 13644,
+                "final_url": "http://localhost:3000/rest/products/search"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/rest/languages",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 4235 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 4235,
+                "final_url": "http://localhost:3000/rest/languages"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/rest/memories",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 6183 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 6183,
+                "final_url": "http://localhost:3000/rest/memories"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Forced Browsing - Unprotected Resource",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/rest/admin/application-configuration",
+            "method": "GET",
+            "description": "Path accessible without authentication. Returned status 200 with 21770 bytes.",
+            "evidence": {
+                "status_code": 200,
+                "body_length": 21770,
+                "final_url": "http://localhost:3000/rest/admin/application-configuration"
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Session Not Invalidated on Logout",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000",
+            "method": "GET",
+            "description": "Session token remains valid after logout.",
+            "evidence": {
+                "role": "user_a",
+                "post_logout_status_code": 200,
+                "post_logout_body_length": 75002,
+                "sensitive_fields_present": {}
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Session Not Invalidated on Logout",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000",
+            "method": "GET",
+            "description": "Session token remains valid after logout.",
+            "evidence": {
+                "role": "user_b",
+                "post_logout_status_code": 200,
+                "post_logout_body_length": 75002,
+                "sensitive_fields_present": {}
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "JWT Token Reuse",
+            "severity": "Medium",
+            "endpoint": "http://localhost:3000/rest/user/login",
+            "method": "POST",
+            "description": "The server issued the same JWT for two separate authentication requests using the same credentials. Juice Shop should issue a unique token per login.",
+            "evidence": {
+                "token_a": "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJ...",
+                "token_b": "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJ...",
+                "tokens_identical": true
+            },
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Workflow Bypass - Step Skip",
+            "severity": "High",
+            "endpoint": "",
+            "method": "POST",
+            "description": "Workflow `add_to_basket_and_checkout` allows the final action to be completed without executing intermediate validation steps, indicating missing server-side state enforcement.",
+            "evidence": "Final step of workflow `add_to_basket_and_checkout` succeeded with HTTP 200 after skipping all middle steps.",
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Workflow Bypass - Step Skip",
+            "severity": "High",
+            "endpoint": "",
+            "method": "POST",
+            "description": "Step 2 of workflow `add_to_basket_and_checkout` () is not enforced server-side and can be omitted without preventing the final action from succeeding.",
+            "evidence": "Final step of workflow `add_to_basket_and_checkout` succeeded with HTTP 200 when step 2 () was skipped.",
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Workflow Bypass - Out of Order Execution",
+            "severity": "High",
+            "endpoint": "",
+            "method": "POST",
+            "description": "Workflow `add_to_basket_and_checkout` does not enforce step execution order server-side. The final action succeeded under a reordered sequence (1 -> 3 -> 2), indicating missing state machine enforcement.",
+            "evidence": "Final step of workflow `add_to_basket_and_checkout` succeeded with HTTP 200 under step order: 1 -> 3 -> 2.",
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Workflow Bypass - Out of Order Execution",
+            "severity": "High",
+            "endpoint": "",
+            "method": "POST",
+            "description": "Workflow `add_to_basket_and_checkout` does not enforce step execution order server-side. The final action succeeded under a reordered sequence (2 -> 1 -> 3), indicating missing state machine enforcement.",
+            "evidence": "Final step of workflow `add_to_basket_and_checkout` succeeded with HTTP 200 under step order: 2 -> 1 -> 3.",
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Workflow Bypass - Out of Order Execution",
+            "severity": "High",
+            "endpoint": "",
+            "method": "GET",
+            "description": "Workflow `add_to_basket_and_checkout` does not enforce step execution order server-side. The final action succeeded under a reordered sequence (2 -> 3 -> 1), indicating missing state machine enforcement.",
+            "evidence": "Final step of workflow `add_to_basket_and_checkout` succeeded with HTTP 200 under step order: 2 -> 3 -> 1.",
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Workflow Bypass - Out of Order Execution",
+            "severity": "High",
+            "endpoint": "",
+            "method": "POST",
+            "description": "Workflow `add_to_basket_and_checkout` does not enforce step execution order server-side. The final action succeeded under a reordered sequence (3 -> 1 -> 2), indicating missing state machine enforcement.",
+            "evidence": "Final step of workflow `add_to_basket_and_checkout` succeeded with HTTP 200 under step order: 3 -> 1 -> 2.",
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Workflow Bypass - Out of Order Execution",
+            "severity": "High",
+            "endpoint": "",
+            "method": "GET",
+            "description": "Workflow `add_to_basket_and_checkout` does not enforce step execution order server-side. The final action succeeded under a reordered sequence (3 -> 2 -> 1), indicating missing state machine enforcement.",
+            "evidence": "Final step of workflow `add_to_basket_and_checkout` succeeded with HTTP 200 under step order: 3 -> 2 -> 1.",
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Workflow Bypass - Cross-Session Replay",
+            "severity": "High",
+            "endpoint": "",
+            "method": "POST",
+            "description": "The final action of workflow `add_to_basket_and_checkout` can be executed by a different authenticated user without completing the prior steps, indicating the server does not bind workflow state to the originating session.",
+            "evidence": "Final step of workflow `add_to_basket_and_checkout` succeeded with HTTP 200 when replayed under `user_b` session.",
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        },
+        {
+            "vuln_type": "Workflow Bypass - Unauthenticated Replay",
+            "severity": "Critical",
+            "endpoint": "",
+            "method": "POST",
+            "description": "The final action of workflow `add_to_basket_and_checkout` can be executed without any authentication, bypassing all session and workflow state requirements.",
+            "evidence": "Final step of workflow `add_to_basket_and_checkout` succeeded with HTTP 200 when replayed with no authentication.",
+            "request_log": [],
+            "remediation": "",
+            "cvss_category": ""
+        }
+    ],
+    "evidence": {}
+}

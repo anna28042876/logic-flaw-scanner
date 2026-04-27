@@ -7,8 +7,6 @@ and other testing modules that need to include a valid CSRF token, when submitti
 either target.
 """
 
-import re
-
 from bs4 import BeautifulSoup
 
 from scanner.core.logger import get_logger
@@ -16,13 +14,14 @@ from scanner.core.logger import get_logger
 
 logger = get_logger(__name__)
 
+
 class CSRFExtractor:
-    """ Extracts CSRF tokens from HTML bodies, cookies, and response headers across Juice Shop, and DVWA."""
+    """Extracts CSRF tokens from HTML bodies, cookies, and response headers across Juice Shop, and DVWA."""
 
     @staticmethod
     def extract_from_html(html_body):
-        """ PArses `html_body` with `BeautifulSoup`, and searches for CSRF tokens in hidden input fields, and meta tags.
-        Returns a dictionary mapping each discovered field name to its token value, or an empty dictionary if no CSRF 
+        """PArses `html_body` with `BeautifulSoup`, and searches for CSRF tokens in hidden input fields, and meta tags.
+        Returns a dictionary mapping each discovered field name to its token value, or an empty dictionary if no CSRF
         tokens are found."""
 
         tokens = {}
@@ -34,6 +33,7 @@ class CSRFExtractor:
             "_token",
             "__RequestVerificationToken",
             "XSRF-TOKEN",
+            "user_token",
         ]
 
         try:
@@ -48,14 +48,16 @@ class CSRFExtractor:
                     tokens[name] = value
                     logger.debug(f"CSRF token found in hidden input field: {name}")
 
-            # Searches for all meta tags, for a csrf-token name attribute, and records its content value. 
+            # Searches for all meta tags, for a csrf-token name attribute, and records its content value.
             for meta_tag in soup.find_all("meta"):
                 meta_name = meta_tag.get("name", "").lower()
                 content = meta_tag.get("content", "")
                 # Adds the meta tag name, and content, to te result dictionary, when the meta name indicates a CSRF token.
                 if "csrf" in meta_name and content:
                     tokens[meta_tag.get("name")] = content
-                    logger.debug(f"CSRF token found in meta tag: {meta_tag.get('name')}")
+                    logger.debug(
+                        f"CSRF token found in meta tag: {meta_tag.get('name')}"
+                    )
 
         except Exception as exc:
             logger.warning(f"HTML parsing failed during CSRF token extraction: {exc}")
@@ -64,7 +66,7 @@ class CSRFExtractor:
 
     @staticmethod
     def extract_from_cookies(cookies_dict):
-        """ Searches `cookies_dict` for CSRF-related cookie names used byh Juice Shop and DVWA. Returns the token string if a
+        """Searches `cookies_dict` for CSRF-related cookie names used byh Juice Shop and DVWA. Returns the token string if a
         recognised CSRF cookie is found, or None otherwise."""
 
         csrf_cookie_names = ["XSRF-TOKEN", "csrf_token"]
@@ -80,12 +82,12 @@ class CSRFExtractor:
 
     @staticmethod
     def extract_from_headers(response_headers):
-        """ Searches `response_headers` for CSRF-related header names. Returns the token string if a recognised CSRF header is
+        """Searches `response_headers` for CSRF-related header names. Returns the token string if a recognised CSRF header is
         found, or None otherwise."""
 
         csrf_header_names = ["X-CSRF-Token", "X-XSRF-Token"]
 
-        # Iterates over known CSRF header names, and returns the first matching value from the provided response headers. 
+        # Iterates over known CSRF header names, and returns the first matching value from the provided response headers.
         for name in csrf_header_names:
             value = response_headers.get(name)
             if value:
@@ -95,8 +97,8 @@ class CSRFExtractor:
         return None
 
     def get_csrf_for_request(self, http_client, url, session_kwargs):
-        """ GETs `url` via `http_client`, then calls all three extract methods against the response. Returns a dict describing 
-        the best token found, and its placement, with keys `token`, `placement`, and `field_name`. Returns None if no token is 
+        """GETs `url` via `http_client`, then calls all three extract methods against the response. Returns a dict describing
+        the best token found, and its placement, with keys `token`, `placement`, and `field_name`. Returns None if no token is
         found."""
 
         # Skips the fetch, and returns None if no URL is provided.
@@ -107,12 +109,16 @@ class CSRFExtractor:
         try:
             response = http_client.get(url, role=None)
         except Exception as exc:
-            logger.warning(f"GET request to {url} failed during CSRF token retrieval: {exc}")
+            logger.warning(
+                f"GET request to {url} failed during CSRF token retrieval: {exc}"
+            )
             return None
 
         # Returns NOne if the GET request produced no response.
         if response is None:
-            logger.debug(f"No response received from {url} during CSRF token retrieval.")
+            logger.debug(
+                f"No response received from {url} during CSRF token retrieval."
+            )
             return None
 
         # Attempts HTML extraction first, as hidden form fields are the most common CSRF placements on DVWA.
@@ -132,7 +138,11 @@ class CSRFExtractor:
         header_token = CSRFExtractor.extract_from_headers(dict(response.headers))
         if header_token:
             matched_header = next(
-                (h for h in ["X-CSRF-Token", "X-XSRF-Token"] if response.headers.get(h)),
+                (
+                    h
+                    for h in ["X-CSRF-Token", "X-XSRF-Token"]
+                    if response.headers.get(h)
+                ),
                 "X-CSRF-Token",
             )
             logger.debug(
@@ -151,9 +161,7 @@ class CSRFExtractor:
                 (c for c in ["XSRF-TOKEN", "csrf_token"] if response.cookies.get(c)),
                 "XSRF-TOKEN",
             )
-            logger.debug(
-                f"Returning CSRF token from cookie at {url}: {matched_cookie}"
-            )
+            logger.debug(f"Returning CSRF token from cookie at {url}: {matched_cookie}")
             return {
                 "token": cookie_token,
                 "placement": "cookie",

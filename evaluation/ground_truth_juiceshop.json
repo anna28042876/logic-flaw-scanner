@@ -1,0 +1,147 @@
+{
+  "metadata": {
+    "target": "OWASP Juice Shop",
+    "version": "v17.1.1",
+    "base_url": "http://localhost:3000",
+    "selection_criteria": "Covers all scanner the scanner module categories such as broken access control, broken authentication, missing rate limiting, and workflow manipulation. All 13 entries are known true-positive vulnerabilities, verified manually against OWASP Juice Shop v17.1.1.",
+    "total_entries": 13,
+    "category_counts": {
+      "broken_access_control": 6,
+      "broken_authentication": 3,
+      "security_misconfiguration": 2,
+      "workflow_manipulation": 2
+    }
+  },
+  "entries": [
+    {
+      "id": "JS-001",
+      "name": "View Another User's Basket",
+      "category": "broken_access_control",
+      "endpoint": "/rest/basket/{id}",
+      "method": "GET",
+      "scanner_module": "horizontal_auth",
+      "expected_behaviour": "Only the basket owner receives a 200 OK response with basket contents. Any other authenticated user requesting a basket ID belonging to a different user must receive 401, or 403.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-002",
+      "name": "Add Item to Another User's Basket",
+      "category": "broken_access_control",
+      "endpoint": "/api/BasketItems",
+      "method": "POST",
+      "scanner_module": "horizontal_auth",
+      "expected_behaviour": "The server must reject POST requests where the `BasketId` in the JSON body belongs to a different authenticated user. A cross-user write attempt must receive 401 ,or 403.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-003",
+      "name": "Retrieve Full User List via Admin-Only REST Endpoint",
+      "category": "broken_access_control",
+      "endpoint": "/api/Users",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "A non-admin authenticated user, and an unauthenticated session requesting `GET /api/Users`  must receive 401, or 403. Only the admin role may receive the full user array. This endpoint is identified as admin-only via the discovered_by_roles mechanism in vertical_auth.py.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-004",
+      "name": "Access Admin-Only Complaints Endpoint",
+      "category": "broken_access_control",
+      "endpoint": "/api/Complaints",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": " A non-admin authenticated user, and an unauthenticated session requesting `GET /api/Complaints` must receive 401, or 403. Only the admin role may read the full complaints list.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-005",
+      "name": "Post Feedback Under Another User's Identity",
+      "category": "broken_access_control",
+      "endpoint": "/api/Feedbacks",
+      "method": "POST",
+      "scanner_module": "horizontal_auth",
+      "expected_behaviour": "The server must reject `POST` requests, where the `UserId` field in the JSON body belongs to a different authenticated user. Any cross-user feedback submission must receive 401, or 403.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-006",
+      "name": "Modify Another User's Product Review",
+      "category": "broken_access_control",
+      "endpoint": "/rest/products/{id}/reviews",
+      "method": "PATCH",
+      "scanner_module": "horizontal_auth",
+      "expected_behaviour": "A user may only edit the reviews they wrote. A `PATCH` request submitted with a review identifier belonging to a different user must receive 401, or 403.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-007",
+      "name": "Session Token Not Invalidated After Logout",
+      "category": "broken_authentication",
+      "endpoint": "/rest/user/logout",
+      "method": "POST",
+      "scanner_module": "session_termination",
+      "expected_behaviour": "After a successful `POST` to `/rest/user/logout`, any subsequent request using the previously issued JWT must receive 401. Juice Shop doesn't have a token blacklist, so the old token remains accepted by the server.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-008",
+      "name": "Identical JWT Re-Issued on Re-Login",
+      "category": "broken_authentication",
+      "endpoint": "/rest/user/login",
+      "method": "POST",
+      "scanner_module": "session_fixation",
+      "expected_behaviour": "Each `POST` to `/rest/user/login` with the same credentials must issue a new, distinct, JWT. Receiving the same token on re-authentication indicates that the server is not generating fresh tokens per session, suggesting a session fixation risk. ",
+      "in_scope": true
+    },
+    {
+      "id": "JS-009",
+      "name": "Password Reset Endpoint Has No Rate Limiting",
+      "category": "broken_authentication",
+      "endpoint": "/rest/user/reset-password",
+      "method": "POST",
+      "scanner_module": "rate_limit_detector",
+      "expected_behaviour": "Repeated wrong security question answers submitted to `/rest/user/reset-password` must trigger 429 responses, or an account lockout within a reasonable threshold. Juice Shop applies no such throttling to this endpoint.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-010",
+      "name": "Login Endpoint Has No Brute Force Protection",
+      "category": "security_misconfiguration",
+      "endpoint": "/rest/user/login",
+      "method": "POST",
+      "scanner_module": "rate_limit_detector",
+      "expected_behaviour": "Repeated failed login attempts must trigger 429 responses, account lockout, or CAPTCHA enforcement within a reasonable threshold. Juice Shop applies no rate limiting to this endpoint. Tests use the dummy credential defined by `RATE_LIMIT_TEST_EMAIL` in `rate_limit_detector.py` to avoid generating valid tokens, or corrupting test account state.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-011",
+      "name": "Registration Endpoint Has No Rate Limiting",
+      "category": "security_misconfiguration",
+      "endpoint": "/api/Users",
+      "method": "POST",
+      "scanner_module": "rate_limit_detector",
+      "expected_behaviour": "Mass account creation via repeated `POST` requests to `/api/Users` must be throttled. Juice Shop applies no rate limiting to the account registration endpoint.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-012",
+      "name": "Negative Quantity Item Accepted in Basket",
+      "category": "workflow_manipulation",
+      "endpoint": "/api/BasketItems",
+      "method": "POST",
+      "scanner_module": "workflow_bypass",
+      "expected_behaviour": "`POST` requests supplying a negative quantity value must be rejected with 400. Juice Shop accepts negative quantities, which reduces the basket total, and enables a near-zero-cost purchase.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-013",
+      "name": "Checkout Workflow Step Skipping",
+      "category": "workflow_manipulation",
+      "endpoint": "/rest/basket/{id}/checkout",
+      "method": "POST",
+      "scanner_module": "workflow_bypass",
+      "expected_behaviour": "Submitting the checkout confirmation request without completing the intermediate address, delivery, and payment steps must return 400,  or 403. Juice Shop doesn't enforce server-side workflow state, so the order is placed, regardless of which prior steps were completed.",
+      "in_scope": true
+    }
+  ]
+}

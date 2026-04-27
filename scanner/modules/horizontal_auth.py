@@ -2,7 +2,7 @@
 `horizontal_auth.py`
 
 Tests for IDOR and BOLA vulnerabilities across Juice Shop, and DVWA, by comparing responses between `user_a`, and `user_b` sessions.
-Implements three test types: reads access using cross-role resource ID substitution, write access using cross-role modification requests, 
+Implements three test types: reads access using cross-role resource ID substitution, write access using cross-role modification requests,
 and sequential ID enumeration. Uses `ResponseComparator`, and `CSRFExtractor` throughout.
 """
 
@@ -31,7 +31,7 @@ URL_NUMERIC_SEGMENT_PATTERN = re.compile(r"/\d+")
 
 
 class HorizontalAuthTester:
-    """ Tests IDOR, and BOLA vulnerabilities by substituting resource IDs across `user_a`, and `user_b` sessions."""
+    """Tests IDOR, and BOLA vulnerabilities by substituting resource IDs across `user_a`, and `user_b` sessions."""
 
     def __init__(
         self,
@@ -40,8 +40,7 @@ class HorizontalAuthTester:
         session_manager: SessionManager,
         comparator: ResponseComparator,
     ):
-        
-        """ Stores all the injected dependencies, and initialises `self.findings` as an empty list for recording `Vulnerability1`
+        """Stores all the injected dependencies, and initialises `self.findings` as an empty list for recording `Vulnerability1`
         objects found during horizontal authorisation testing."""
 
         self.config = config
@@ -52,7 +51,7 @@ class HorizontalAuthTester:
         self.findings = []
 
     def _identify_user_specific_endpoints(self, endpoints, endpoint_params):
-        """ Filters through the provided endpoint list, to those likely to involve per-user resources. Includes endpoints with at 
+        """Filters through the provided endpoint list, to those likely to involve per-user resources. Includes endpoints with at
         least one parameter flagges as `is_id_field`, in `endpoint_params`, and endpoints whose URL contains a numeric path segment."""
 
         user_specific = []
@@ -77,7 +76,7 @@ class HorizontalAuthTester:
         return user_specific
 
     def _get_user_resource_id(self, endpoint, role):
-        """ Attempts three strategies to find a resource ID owned by the specified role. Self-referencing API endpoints, crawled JSON
+        """Attempts three strategies to find a resource ID owned by the specified role. Self-referencing API endpoints, crawled JSON
         list endpoints, then config-provided known IDs. Then returns the first ID found as a string, or None if all three strategies
         fail."""
 
@@ -94,7 +93,9 @@ class HorizontalAuthTester:
         for path in self_ref_paths:
             url = self.config.target_url.rstrip("/") + path
             try:
-                response = self.http_client.send_request("GET", url, session_key=role)[0]
+                response = self.http_client.send_request("GET", url, session_key=role)[
+                    0
+                ]
                 # SKips this path if no response was received, or the server did not return 200.
                 if response is None or response.status_code != 200:
                     continue
@@ -105,7 +106,10 @@ class HorizontalAuthTester:
                         data = body.get("data", body)
                         # Iterates over top-level fields to find a numeric value, whose key name suggests a resource ID.
                         for key, value in data.items():
-                            if key.lower() in ("id", "userid", "user_id") and str(value).isdigit():
+                            if (
+                                key.lower() in ("id", "userid", "user_id")
+                                and str(value).isdigit()
+                            ):
                                 logger.debug(
                                     f"Resource ID for role {role} found via self-referencing path {path}: {value}"
                                 )
@@ -113,7 +117,9 @@ class HorizontalAuthTester:
                 except Exception:
                     pass
             except Exception as exc:
-                logger.debug(f"Self-referencing path {path} failed for role {role}: {exc}")
+                logger.debug(
+                    f"Self-referencing path {path} failed for role {role}: {exc}"
+                )
 
         # Strat 2 tries the endpoint itself as a list resource, and cross-references returned IDs with the role's email.
         # Finds the matching credential dict from the credentials list by role field.
@@ -123,7 +129,9 @@ class HorizontalAuthTester:
         role_email = role_credentials.get("email", role_credentials.get("username", ""))
 
         try:
-            response = self.http_client.send_request("GET", endpoint.url, session_key=role)[0]
+            response = self.http_client.send_request(
+                "GET", endpoint.url, session_key=role
+            )[0]
             # Skips strategy 2 if there are no valid JSON array responses returned from the endpoint.
             if response is not None and response.status_code == 200:
                 try:
@@ -135,7 +143,12 @@ class HorizontalAuthTester:
                                 item_email = item.get("email", item.get("username", ""))
                                 item_id = item.get("id")
                                 # Returns the item ID when the email field matches the role's known identifier.
-                                if item_email and role_email and item_email == role_email and item_id:
+                                if (
+                                    item_email
+                                    and role_email
+                                    and item_email == role_email
+                                    and item_id
+                                ):
                                     logger.debug(
                                         f"Resource ID for role {role} found via list endpoint {endpoint.url}: {item_id}"
                                     )
@@ -143,7 +156,9 @@ class HorizontalAuthTester:
                 except Exception:
                     pass
         except Exception as exc:
-            logger.debug(f"List endpoint tier 2 lookup failed for role {role} at {endpoint.url}: {exc}")
+            logger.debug(
+                f"List endpoint tier 2 lookup failed for role {role} at {endpoint.url}: {exc}"
+            )
 
         # Strat 3 falls back to any manually specified IDs in the optional `known_resource_ids` section of `config`.
         known_ids = getattr(self.config, "known_resource_ids", {})
@@ -162,14 +177,16 @@ class HorizontalAuthTester:
         return None
 
     def _build_url_with_id(self, endpoint, id_value):
-        """ Substitutes the firsst numeric segment in the endpoint URL with `id_value`, then returns the modified URL string, or 
+        """Substitutes the firsst numeric segment in the endpoint URL with `id_value`, then returns the modified URL string, or
         the original URL if no numeric segment is found."""
 
-        substituted = URL_NUMERIC_SEGMENT_PATTERN.sub(f"/{id_value}", endpoint.url, count=1)
+        substituted = URL_NUMERIC_SEGMENT_PATTERN.sub(
+            f"/{id_value}", endpoint.url, count=1
+        )
         return substituted
 
     def test_idor_read(self, endpoint, id_param, role_a="user_a", role_b="user_b"):
-        """ Tests whether `role_b` can read a resource owned by `role_a`, by substituting `role_a`'s resource ID into a request sent
+        """Tests whether `role_b` can read a resource owned by `role_a`, by substituting `role_a`'s resource ID into a request sent
         with `role_b`'s session. Also tests the reverse, and flags critical IDOR findings when a data leak is confirmed."""
 
         id_a = self._get_user_resource_id(endpoint, role_a)
@@ -182,7 +199,7 @@ class HorizontalAuthTester:
             )
             return
 
-        # Tests cross-roles read access in both directions, `role_b` reading `role_a`'s resource, vice versa. 
+        # Tests cross-roles read access in both directions, `role_b` reading `role_a`'s resource, vice versa.
         for attacker_role, owner_role, owner_id in [
             (role_b, role_a, id_a),
             (role_a, role_b, id_b),
@@ -191,9 +208,13 @@ class HorizontalAuthTester:
 
             # Step a sends the leigitimate request as the owner, to establish an authenticated baseline response.
             try:
-                response_owner = self.http_client.send_request("GET", url_with_id, session_key=owner_role)[0]
+                response_owner = self.http_client.send_request(
+                    "GET", url_with_id, session_key=owner_role
+                )[0]
             except Exception as exc:
-                logger.debug(f"Owner request to {url_with_id} as {owner_role} failed: {exc}")
+                logger.debug(
+                    f"Owner request to {url_with_id} as {owner_role} failed: {exc}"
+                )
                 continue
 
             # Skips this pair if the owner's own request did not return 200.
@@ -202,9 +223,13 @@ class HorizontalAuthTester:
 
             # Step b sends the exact same URL, using the attacker's session to test for unauthorised access.
             try:
-                response_attacker = self.http_client.send_request("GET", url_with_id, session_key=attacker_role)[0]
+                response_attacker = self.http_client.send_request(
+                    "GET", url_with_id, session_key=attacker_role
+                )[0]
             except Exception as exc:
-                logger.debug(f"Attacker request to {url_with_id} as {attacker_role} failed: {exc}")
+                logger.debug(
+                    f"Attacker request to {url_with_id} as {attacker_role} failed: {exc}"
+                )
                 continue
 
             # SKips this pair if the attacker received no response.
@@ -216,7 +241,9 @@ class HorizontalAuthTester:
                 continue
 
             # Compares the response body lengths, to check whether the attacker received a substantially similar payload to the owner.
-            length_result = self.comparator.compare_body_length(response_owner, response_attacker)
+            length_result = self.comparator.compare_body_length(
+                response_owner, response_attacker
+            )
             # Extracts the boolean result from the comparator dictionary. True means lengths are within the configured threshold.
             same_length = length_result.get("within_threshold", False)
 
@@ -261,7 +288,7 @@ class HorizontalAuthTester:
                 )
 
     def test_idor_write(self, endpoint, id_param, role_a="user_a", role_b="user_b"):
-        """ Tests whether `role_b` can modify a resource owned by `role_a`, by sending a POST, PUT, PATCH, or DELETE request with
+        """Tests whether `role_b` can modify a resource owned by `role_a`, by sending a POST, PUT, PATCH, or DELETE request with
         `role_a`'s resrouce ID, using `role_b`'s session. Flags critical IDOR findings when the server returns 200 or 204."""
 
         write_methods = ("POST", "PUT", "PATCH", "DELETE")
@@ -285,11 +312,14 @@ class HorizontalAuthTester:
         try:
             # Uses `http_client.send_request` for PUT and PATCH as a close enough proxy to test whether the server accepts the modification.
             if endpoint.method.upper() in ("PUT", "PATCH"):
-                response = self.http_client.send_request("POST", url_with_id, session_key=role_b)[0]
+                response = self.http_client.send_request(
+                    "POST", url_with_id, session_key=role_b
+                )[0]
             elif endpoint.method.upper() == "DELETE":
                 # Builds a raw `request.Session` for DELETE, because `http_client` does not expose a delete convenience method.
                 session_kwargs = self.session_manager.get_session_kwargs(role_b)
                 import requests as _requests
+
                 s = _requests.Session()
                 headers = session_kwargs.get("headers", {})
                 cookies = session_kwargs.get("cookies", {})
@@ -298,12 +328,18 @@ class HorizontalAuthTester:
                     s.headers.update(headers)
                 if cookies:
                     s.cookies.update(cookies)
-                response = s.delete(url_with_id, timeout=10, verify=self.config.verify_ssl)
+                response = s.delete(
+                    url_with_id, timeout=10, verify=self.config.verify_ssl
+                )
             else:
                 # Falls back to a POST for any other write method, not explicitly handled above.
-                response = self.http_client.send_request("POST", url_with_id, session_key=role_b)[0]
+                response = self.http_client.send_request(
+                    "POST", url_with_id, session_key=role_b
+                )[0]
         except Exception as exc:
-            logger.debug(f"IDOR write request to {url_with_id} as {role_b} failed: {exc}")
+            logger.debug(
+                f"IDOR write request to {url_with_id} as {role_b} failed: {exc}"
+            )
             return
 
         # Skips if no response was received from the server.
@@ -338,8 +374,8 @@ class HorizontalAuthTester:
             )
 
     def test_idor_enumeration(self, endpoint, id_param, role="user_a"):
-        """ Enumerates the IDs numerically, above and below the role's own ID, to detect accessible foreign records. 
-        Skips UUID-format IDs entirely. Stops early after three consecutive 404 responses in either direction, and flags 
+        """Enumerates the IDs numerically, above and below the role's own ID, to detect accessible foreign records.
+        Skips UUID-format IDs entirely. Stops early after three consecutive 404 responses in either direction, and flags
         critical findings for each accessible record."""
 
         own_id_str = self._get_user_resource_id(endpoint, role)
@@ -386,7 +422,9 @@ class HorizontalAuthTester:
             url_with_id = self._build_url_with_id(endpoint, probe_id)
 
             try:
-                response = self.http_client.send_request("GET", url_with_id, session_key=role)[0]
+                response = self.http_client.send_request(
+                    "GET", url_with_id, session_key=role
+                )[0]
             except Exception as exc:
                 logger.debug(f"Enumeration request to {url_with_id} failed: {exc}")
                 continue
@@ -444,7 +482,7 @@ class HorizontalAuthTester:
                 )
 
     def test_all_idor(self, endpoints, endpoint_params):
-        """ Manages all three IDOR test types across every user-specific endpoint identified by `_identify_user_specific_endpoints`. 
+        """Manages all three IDOR test types across every user-specific endpoint identified by `_identify_user_specific_endpoints`.
         Calls `test_idor_read`, `test_idor_write`, and then `test_idor_enumeration` for each endpoint in sequence."""
         targets = self._identify_user_specific_endpoints(endpoints, endpoint_params)
 
@@ -463,5 +501,5 @@ class HorizontalAuthTester:
             self.test_idor_enumeration(endpoint, id_param)
 
     def get_findings(self):
-        """ Returns the comnplete list of `Vunerability` objects, recorded during horizontal authorisation testing."""
+        """Returns the comnplete list of `Vunerability` objects, recorded during horizontal authorisation testing."""
         return self.findings

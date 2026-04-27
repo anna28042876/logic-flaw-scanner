@@ -1,8 +1,8 @@
 """
 unauth_access.py
 
-Performs unauthenticated access checls on discovered endpoints for authentication bypass, by comparing authenticated responses from 
-`http_client.py` against responses sent by a bare session with no credentials. Also performs forced browsing using 
+Performs unauthenticated access checls on discovered endpoints for authentication bypass, by comparing authenticated responses from
+`http_client.py` against responses sent by a bare session with no credentials. Also performs forced browsing using
 `wordlists/common_paths.txt` to find resources accessible without authentication on Juice Shop and DVWA.
 """
 
@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 
 
 class UnauthAccessChecker:
-    """ Detects authentication bypass, and forced browsing vulnerabilities across all discovered endpoints."""
+    """Detects authentication bypass, and forced browsing vulnerabilities across all discovered endpoints."""
 
     def __init__(
         self,
@@ -30,8 +30,7 @@ class UnauthAccessChecker:
         session_manager: SessionManager,
         comparator: ResponseComparator,
     ):
-        
-        """ Stores all injected dependencies and initialises `self.findings` as an empty list
+        """Stores all injected dependencies and initialises `self.findings` as an empty list
         for recording `Vulnerability` objects found during unauthenticated access, and
         forced browsing tests. Creates a `ScopeEnforcer` from `config` for scope validation."""
         self.config = config
@@ -42,28 +41,36 @@ class UnauthAccessChecker:
         self.findings = []
 
     def test_endpoint(self, endpoint):
-        """ Sends both authenticated, and unauthenticated, requests to the same endpoint, then compares
+        """Sends both authenticated, and unauthenticated, requests to the same endpoint, then compares
         responses. Flags an authentication bypass if `ResponseComparator` detects matching content
         length. or sensitive field exposure in the unauthenticated response."""
 
         # Skips endpoints outside of the configured scan scope to avoid unintended requests.
         if not self.scope.is_in_scope(endpoint.url):
-            logger.debug(f"{endpoint.url} is out of scope, skipping unauthenticated access check.")
+            logger.debug(
+                f"{endpoint.url} is out of scope, skipping unauthenticated access check."
+            )
             return
 
         # Sends a GET or POST request to the endpoint URL using the `user_a` authenticated session from `http_client`.
         try:
             if endpoint.method.upper() == "POST":
-                response_auth = self.http_client.send_request("POST", endpoint.url, session_key="user_a")[0]
+                response_auth = self.http_client.send_request(
+                    "POST", endpoint.url, session_key="user_a"
+                )[0]
             else:
-                response_auth = self.http_client.send_request("GET", endpoint.url, session_key="user_a")[0]
+                response_auth = self.http_client.send_request(
+                    "GET", endpoint.url, session_key="user_a"
+                )[0]
         except Exception as exc:
             logger.warning(f"Authenticated request to {endpoint.url} failed: {exc}")
             return
 
         # Skips this endpoint if the authenticated request returned no respponse after retries.
         if response_auth is None:
-            logger.debug(f"No authenticated response received for {endpoint.url}, skipping.")
+            logger.debug(
+                f"No authenticated response received for {endpoint.url}, skipping."
+            )
             return
 
         # Sends an identical request using a bare session, with no cookies or authentication headers.
@@ -91,7 +98,9 @@ class UnauthAccessChecker:
 
         # Skips  this endpoint if the unauthenticated request produced no usable response.
         if response_unauth is None:
-            logger.debug(f"Unauthenticated response for {endpoint.url} was None, skipping.")
+            logger.debug(
+                f"Unauthenticated response for {endpoint.url} was None, skipping."
+            )
             return
 
         # Skips  this endpoint if `is_access_granted` indicates the server correctly denied the unauthenticated request.
@@ -102,8 +111,10 @@ class UnauthAccessChecker:
             return
 
         # Checks if the authenticated and unauthenticated body lengths are within 10%, suggesting that identical content was returned.
-        length_result = self.comparator.compare_body_length(response_auth, response_unauth)
-        same_content = length_result.get("within_threshold", False)
+        length_result = self.comparator.compare_body_length(
+            response_auth, response_unauth
+        )
+        same_content = length_result
 
         # Extracts any sensitive JSON fields from the unauthenticated response body to confirm data exposure.
         try:
@@ -139,13 +150,15 @@ class UnauthAccessChecker:
             )
 
     def test_forced_browsing(self, custom_paths=None):
-        """ Loads all paths from `wordlists/common_paths.txt`, and sends unauthenticated GET requests
+        """Loads all paths from `wordlists/common_paths.txt`, and sends unauthenticated GET requests
         to each. Flags any path returning status 200 with over 500 bytes that does not redirect
         to a Juice Shop or DVWA login page as a forced browsing vulnerability."""
 
         # Resolves the absolute path to `wordlists/common_paths.txt` relative to the module's location.
         wordlist_path = os.path.normpath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "wordlists", "common_paths.txt")
+            os.path.join(
+                os.path.dirname(__file__), "..", "..", "wordlists", "common_paths.txt"
+            )
         )
 
         paths = []
@@ -194,7 +207,7 @@ class UnauthAccessChecker:
             except Exception as exc:
                 logger.debug(f"Forced browsing request to {url} failed: {exc}")
                 continue
-            
+
             # Skips responses without status 200, or with a body of 500 bytes or fewer, as these are likely error pages.
             if response.status_code != 200 or len(response.content) <= 500:
                 continue
@@ -228,7 +241,7 @@ class UnauthAccessChecker:
             )
 
     def test_all(self, endpoints):
-        """ Calls `test_endpoint` on each item in the provided list, covering all endpoints that were 
+        """Calls `test_endpoint` on each item in the provided list, covering all endpoints that were
         discovered by `crawler.py` and `spa_crawler.py` for unauthenticated access vulnerabilities."""
 
         logger.info(

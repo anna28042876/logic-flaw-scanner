@@ -9,17 +9,17 @@ from datetime import datetime
 from colorama import Fore, Style, init as colorama_init
 
 # Without this, `ANSI` colour codes print as raw escape characters on Windows.
-# `autoreset=True` means that the colour does not have to be manually reset after each line. 
+# `autoreset=True` means that the colour does not have to be manually reset after each line.
 colorama_init(autoreset=True)
 
 
 class ColouredFormatter(logging.Formatter):
     # Maps each log level to a colour so that warnings can be spotted easily in the terminal without having to read the level label every time.
     LEVEL_COLOURS = {
-        logging.DEBUG:    Fore.CYAN,
-        logging.INFO:     Fore.GREEN,
-        logging.WARNING:  Fore.YELLOW,
-        logging.ERROR:    Fore.RED,
+        logging.DEBUG: Fore.CYAN,
+        logging.INFO: Fore.GREEN,
+        logging.WARNING: Fore.YELLOW,
+        logging.ERROR: Fore.RED,
         logging.CRITICAL: Fore.RED,
     }
 
@@ -72,7 +72,7 @@ def setup_logger(
 
 
 def get_logger(name: str) -> logging.Logger:
-    """ Every sub-module (crawler, auth checker, IDOR tester, etc.,) calls this rather than a `setup_logger()`, so they all
-    feed into the same handler chain that was setup at startup. Passing `__name__` gives each module its own label in the log 
+    """Every sub-module (crawler, auth checker, IDOR tester, etc.,) calls this rather than a `setup_logger()`, so they all
+    feed into the same handler chain that was setup at startup. Passing `__name__` gives each module its own label in the log
     output, making tracing issues far easier."""
     return logging.getLogger(name)

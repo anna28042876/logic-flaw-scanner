@@ -1,33 +1,30 @@
 """
 `workflow_bypass.py`
 
-Tests recorded workflows from `WorkflowRecorder` for any logic flaws. Includes step-skipping, out-of-order execution, 
-cross-session replay, unauthenticated replay, and 2FA bypass. The 2FA method is implemented as a theoretical capability,  
+Tests recorded workflows from `WorkflowRecorder` for any logic flaws. Includes step-skipping, out-of-order execution,
+cross-session replay, unauthenticated replay, and 2FA bypass. The 2FA method is implemented as a theoretical capability,
 as neither Juice Shop, nor DVWA, provides a 2FA flow to evaluate against.
 """
 # Possibly implement 2FA flow in custom app.
 
 import copy
 import itertools
-import json
 import random
 
-from scanner.core.http_client import HTTPClient
-from scanner.core.session_manager import SessionManager
-from scanner.core.comparator import ResponseComparator
 from scanner.core.logger import get_logger
 from scanner.core.models import Vulnerability
-from scanner.modules.workflow_recorder import WorkflowRecorder
 
 logger = get_logger(__name__)
 
 
 class WorkflowBypassTester:
-    """ Takes in workflows recorded by `WorkflowRecorder`, and tests each one for bypass vulnerabilities. 
+    """Takes in workflows recorded by `WorkflowRecorder`, and tests each one for bypass vulnerabilities.
     All confirmed findings are stored as `Vulnerability` objects, in `self.findings`."""
 
-    def __init__(self, config, http_client, session_manager, workflow_recorder, comparator):
-        """ Stores `config`, `http_client`, `session_manager`, `workflow_recorder`, and `comparator`. 
+    def __init__(
+        self, config, http_client, session_manager, workflow_recorder, comparator
+    ):
+        """Stores `config`, `http_client`, `session_manager`, `workflow_recorder`, and `comparator`.
         Initialises `self.findings` as an empty list, ready to accumulate bypass findings."""
 
         self.config = config
@@ -39,40 +36,39 @@ class WorkflowBypassTester:
         self.findings = []
 
     def _replay_step(self, step, session_kwargs=None):
-        """ Replays a single recorded step dictionary using `session_kwargs` when called from cross-session, 
+        """Replays a single recorded step dictionary using `session_kwargs` when called from cross-session,
         or authenticated replay tests, or with no credentials when called from `test_replay_unauthenticated`.
         Returns the HTTP response, or None if the request raises an exception."""
 
-        url = step['url']
-        method = step.get('method', 'GET').upper()
+        url = step["url"]
+        method = step.get("method", "GET").upper()
         # Deep copies the body to avoid mutating any of the original recorded steps during replay.
-        body = copy.deepcopy(step.get('body'))
+        body = copy.deepcopy(step.get("body"))
         # Falls back  to an empty dictionary, when no session credentials are provided for unauthenticated replay.
         kwargs = session_kwargs or {}
         # Dispatches POST or GET requests, for the recorded step using the provided session credentials.
         try:
-            if method == 'GET':
-                return self.http_client.get(url, **kwargs)
-            return self.http_client.post(url, json=body, **kwargs)
+            if method == "GET":
+                return self.http_client.get(url, **kwargs)[0]
+            return self.http_client.post(url, json_body=body, **kwargs)[0]
         except Exception as exc:
             logger.warning("Replay of %s %s raised an exception: %s", method, url, exc)
             return None
 
     def _final_step_succeeded(self, response):
-        """ Returns 'True' if `response` indicates the final workflow step was completed successfully, 
+        """Returns 'True' if `response` indicates the final workflow step was completed successfully,
         meaning a 200 status is returned, and access is granted."""
 
         # Returns 'False' immediately when the response is None, due to a request exection.
         if response is None:
             return False
-        return (
-            response.status_code == 200
-            and self.comparator.is_access_granted(response)
+        return response.status_code == 200 and self.comparator.is_access_granted(
+            response
         )
 
     def test_skip_steps(self, workflow_name):
-        """ Retrieves the named workflow from `WorkflowRecorder`, and runs two skip tests, including jumping from step 
-        one directly to the final step, then individually skipping each middle step. Flags a High `Vulnerability` for each 
+        """Retrieves the named workflow from `WorkflowRecorder`, and runs two skip tests, including jumping from step
+        one directly to the final step, then individually skipping each middle step. Flags a High `Vulnerability` for each
         successful bypass."""
 
         workflow = self.workflow_recorder.recorded_workflows.get(workflow_name)
@@ -84,7 +80,7 @@ class WorkflowBypassTester:
             )
             return
 
-        steps = workflow['steps']
+        steps = workflow["steps"]
         # Skips testing if the workflow contains fewer than three steps, as skip testing requires a first, at least one middle, and final step.
         if len(steps) < 3:
             logger.debug(
@@ -97,7 +93,7 @@ class WorkflowBypassTester:
         first_step = steps[0]
         final_step = steps[-1]
         middle_steps = steps[1:-1]
-        session_kwargs = self.session_manager.get_session_kwargs('user_a')
+        session_kwargs = self.session_manager.get_session_kwargs("user_a")
 
         # Test 1. Replays step one to establish a session state, then jumps directly to the final step to check whether the server enforces intermediate steps.
         self._replay_step(first_step, session_kwargs)
@@ -105,16 +101,16 @@ class WorkflowBypassTester:
         # Flags a High findings, if the final step succeeds after all middle steps were skipped.
         if self._final_step_succeeded(response_skip_all):
             vuln = Vulnerability(
-                vuln_type='Workflow Bypass - Step Skip',
-                severity='High',
-                endpoint=final_step['url'],
-                method=final_step.get('method', 'GET').upper(),
-                # Records the HTTP status code, and worfklow name as machine-readable evidence. 
+                vuln_type="Workflow Bypass - Step Skip",
+                severity="High",
+                endpoint=final_step["url"],
+                method=final_step.get("method", "GET").upper(),
+                # Records the HTTP status code, and worfklow name as machine-readable evidence.
                 evidence=(
                     f"Final step of workflow `{workflow_name}` succeeded with HTTP "
                     f"{response_skip_all.status_code} after skipping all middle steps."
                 ),
-                # Describes the missing server-side state enforcement. 
+                # Describes the missing server-side state enforcement.
                 description=(
                     f"Workflow `{workflow_name}` allows the final action to be completed "
                     f"without executing intermediate validation steps, indicating missing "
@@ -129,20 +125,24 @@ class WorkflowBypassTester:
         # Test 2. Iterates each middle step individually, to identify which specific steps the server fails to enforce.
         # Rather than just whether any can be skipped.
         for i, skipped_step in enumerate(middle_steps):
-            # Builds the reduced sequence by excluding on the current middle step at index i. 
-            sequence = [first_step] + [s for j, s in enumerate(middle_steps) if j != i] + [final_step]
+            # Builds the reduced sequence by excluding on the current middle step at index i.
+            sequence = (
+                [first_step]
+                + [s for j, s in enumerate(middle_steps) if j != i]
+                + [final_step]
+            )
             # Replays each step in the reduced seqwuence, to check if the final step still succeeds.
             for step in sequence[:-1]:
                 self._replay_step(step, session_kwargs)
             response_skip_one = self._replay_step(sequence[-1], session_kwargs)
             # FLags a high finding identifying which of the specific middle steps could be skipped.
             if self._final_step_succeeded(response_skip_one):
-                skipped_url = skipped_step['url']
+                skipped_url = skipped_step["url"]
                 vuln = Vulnerability(
-                    vuln_type='Workflow Bypass - Step Skip',
-                    severity='High',
-                    endpoint=final_step['url'],
-                    method=final_step.get('method', 'GET').upper(),
+                    vuln_type="Workflow Bypass - Step Skip",
+                    severity="High",
+                    endpoint=final_step["url"],
+                    method=final_step.get("method", "GET").upper(),
                     # Uses `step_index` + 2 because the middle steps begin at position 2 in the full workflow.
                     evidence=(
                         f"Final step of workflow `{workflow_name}` succeeded with HTTP "
@@ -164,7 +164,7 @@ class WorkflowBypassTester:
                 )
 
     def test_out_of_order(self, workflow_name):
-        """ Retrieves the named workflow, and generates step permutations. For workflows with 4, or fewer, steps, all permutations are tested.
+        """Retrieves the named workflow, and generates step permutations. For workflows with 4, or fewer, steps, all permutations are tested.
         For 5, or more, steps, a targeted stretegy is used where the final step is moved earlier, the first step moved later, and the full reversal.
         It flags a `High` `VUlnerability` for any permutation where the final action succeeds."""
 
@@ -177,7 +177,7 @@ class WorkflowBypassTester:
             )
             return
 
-        steps = workflow['steps']
+        steps = workflow["steps"]
         # Skips testing if the workflow containes fewer than three steps, as the ordering cannot be meaningfully varied.
         if len(steps) < 3:
             logger.debug(
@@ -186,7 +186,7 @@ class WorkflowBypassTester:
             )
             return
 
-        session_kwargs = self.session_manager.get_session_kwargs('user_a')
+        session_kwargs = self.session_manager.get_session_kwargs("user_a")
         # Builds a list of step indices to use as the foundation for generating permutations.
         indices = list(range(len(steps)))
         # Stores the canonical order, to exclude it from bypass testing, as it is the legitimate sequence.
@@ -218,7 +218,7 @@ class WorkflowBypassTester:
             targeted.add(tuple(reversed(indices)))
             permutations_to_test = list(targeted)
 
-        # Iterates each permutation, replays the reordered steps, and checks if the final action succeeds. 
+        # Iterates each permutation, replays the reordered steps, and checks if the final action succeeds.
         for perm in permutations_to_test:
             # SKips the canonical order, as it is the legitimate sequence, and not a bypass attempt.
             if tuple(perm) == canonical:
@@ -229,15 +229,15 @@ class WorkflowBypassTester:
             for step in reordered_steps[:-1]:
                 self._replay_step(step, session_kwargs)
             response_final = self._replay_step(reordered_steps[-1], session_kwargs)
-            # FLags a 'High' finding, if the final step succeeds under a reordered execution sequence. 
+            # FLags a 'High' finding, if the final step succeeds under a reordered execution sequence.
             if self._final_step_succeeded(response_final):
                 # Formats the step order as human-readable strings, using 1-based step numbers.
-                order_str = ' -> '.join(str(i + 1) for i in perm)
+                order_str = " -> ".join(str(i + 1) for i in perm)
                 vuln = Vulnerability(
-                    vuln_type='Workflow Bypass - Out of Order Execution',
-                    severity='High',
-                    endpoint=reordered_steps[-1]['url'],
-                    method=reordered_steps[-1].get('method', 'GET').upper(),
+                    vuln_type="Workflow Bypass - Out of Order Execution",
+                    severity="High",
+                    endpoint=reordered_steps[-1]["url"],
+                    method=reordered_steps[-1].get("method", "GET").upper(),
                     evidence=(
                         f"Final step of workflow `{workflow_name}` succeeded with HTTP "
                         f"{response_final.status_code} under step order: {order_str}."
@@ -257,7 +257,7 @@ class WorkflowBypassTester:
                 )
 
     def test_replay_cross_session(self, workflow_name):
-        """ Replays the final step of the named workflow, using `user_bs`'s session, instead of the original role.
+        """Replays the final step of the named workflow, using `user_bs`'s session, instead of the original role.
         Flags a 'High' `Vulnerability`, if the final step succeeds under the alternate session."""
 
         workflow = self.workflow_recorder.recorded_workflows.get(workflow_name)
@@ -269,18 +269,18 @@ class WorkflowBypassTester:
             )
             return
 
-        steps = workflow['steps']
+        steps = workflow["steps"]
         final_step = steps[-1]
         # Retrieves `user_b` session credentials to replay the final step under a different unauthenticated user.
-        cross_kwargs = self.session_manager.get_session_kwargs('user_b')
+        cross_kwargs = self.session_manager.get_session_kwargs("user_b")
         response = self._replay_step(final_step, cross_kwargs)
         # Flags a 'High' finding if the final step succeeds under a different user session.
         if self._final_step_succeeded(response):
             vuln = Vulnerability(
-                vuln_type='Workflow Bypass - Cross-Session Replay',
-                severity='High',
-                endpoint=final_step['url'],
-                method=final_step.get('method', 'GET').upper(),
+                vuln_type="Workflow Bypass - Cross-Session Replay",
+                severity="High",
+                endpoint=final_step["url"],
+                method=final_step.get("method", "GET").upper(),
                 evidence=(
                     f"Final step of workflow `{workflow_name}` succeeded with HTTP "
                     f"{response.status_code} when replayed under `user_b` session."
@@ -298,7 +298,7 @@ class WorkflowBypassTester:
             )
 
     def test_replay_unauthenticated(self, workflow_name):
-        """ Replays the final step of the named workflow, with no authentication credentials.
+        """Replays the final step of the named workflow, with no authentication credentials.
         Flags a 'Critical' `Vulnerability` if the final step succeeds without any session."""
 
         workflow = self.workflow_recorder.recorded_workflows.get(workflow_name)
@@ -310,17 +310,17 @@ class WorkflowBypassTester:
             )
             return
 
-        steps = workflow['steps']
+        steps = workflow["steps"]
         final_step = steps[-1]
-        # Passes no session kwargs, so that the request is sent with no authentication credentials. 
+        # Passes no session kwargs, so that the request is sent with no authentication credentials.
         response = self._replay_step(final_step)
         # FLags a 'Critical' findings, if the final step succeeds with no authentication credentials.
         if self._final_step_succeeded(response):
             vuln = Vulnerability(
-                vuln_type='Workflow Bypass - Unauthenticated Replay',
-                severity='Critical',
-                endpoint=final_step['url'],
-                method=final_step.get('method', 'GET').upper(),
+                vuln_type="Workflow Bypass - Unauthenticated Replay",
+                severity="Critical",
+                endpoint=final_step["url"],
+                method=final_step.get("method", "GET").upper(),
                 evidence=(
                     f"Final step of workflow `{workflow_name}` succeeded with HTTP "
                     f"{response.status_code} when replayed with no authentication."
@@ -336,16 +336,24 @@ class WorkflowBypassTester:
                 "CRITICAL: Unauthenticated replay confirmed for workflow `%s`.",
                 workflow_name,
             )
+
     ### Skeleton -- Custom app.
     def test_2fa_bypass(self):
-        """ Checks `self.config.workflows` for any workflow tagged as '2fa'. If found, executes the login step, 
-        skips the 2FA step, and attempts to access a protected resource. Neither Juice Shop, nor DVWA, implements 
+        """Checks `self.config.workflows` for any workflow tagged as '2fa'. If found, executes the login step,
+        skips the 2FA step, and attempts to access a protected resource. Neither Juice Shop, nor DVWA, implements
         2FA, so this method can't be evaluated against them, but has been theoretically implemented for the custom app."""
 
+        # Handles both list format (from YAML array) and dict format, for workflow definitions.
+        raw_workflows = self.config.workflows
+        if isinstance(raw_workflows, list):
+            workflows_dict = {item["name"]: item for item in raw_workflows}
+        else:
+            workflows_dict = raw_workflows
+
         # Iterates config workflows, and tests any tagged as 2fa, by skipping the 2FA verification step.
-        for workflow_name, workflow_def in self.config.workflows.items():
+        for workflow_name, workflow_def in workflows_dict.items():
             # SKips any workflow that is not explicitly tagged as 2FA flow, in the config.
-            if workflow_def.get('type') != '2fa':
+            if workflow_def.get("type") != "2fa":
                 continue
 
             # Logs a notivce that the test is theoretical for the custom app only, and cannot produce real results against JS + DVWA.
@@ -367,7 +375,7 @@ class WorkflowBypassTester:
                 )
                 continue
 
-            steps = workflow['steps']
+            steps = workflow["steps"]
             # SKips extraction if the workflow does not contain at least three steps for login, 2FA, and resource access.
             if len(steps) < 3:
                 logger.debug(
@@ -376,7 +384,7 @@ class WorkflowBypassTester:
                 )
                 continue
 
-            session_kwargs = self.session_manager.get_session_kwargs('user_a')
+            session_kwargs = self.session_manager.get_session_kwargs("user_a")
             # Treats the first recorded step as the login step, and the last as the protected resource access.
             login_step = steps[0]
             protected_step = steps[-1]
@@ -387,10 +395,10 @@ class WorkflowBypassTester:
             # FLags a 'Critical' finding, if the protected resource is accessible after skipping the 2FA step.
             if self._final_step_succeeded(response):
                 vuln = Vulnerability(
-                    vuln_type='Workflow Bypass - 2FA Skip',
-                    severity='Critical',
-                    endpoint=protected_step['url'],
-                    method=protected_step.get('method', 'GET').upper(),
+                    vuln_type="Workflow Bypass - 2FA Skip",
+                    severity="Critical",
+                    endpoint=protected_step["url"],
+                    method=protected_step.get("method", "GET").upper(),
                     evidence=(
                         f"Protected resource at {protected_step['url']} returned HTTP "
                         f"{response.status_code} after login with no 2FA step completed."
@@ -408,11 +416,11 @@ class WorkflowBypassTester:
                 )
 
     def test_all_workflows(self):
-        """ Iterates all worfklows in `self.workflow_recorded.recorded_workflows`, and runs `test_skip_steps`, 
-        `test_out_of_order`, `test_replay_cross_session`, and `test_replay_unauthenticated` for each. Also runs 
+        """Iterates all worfklows in `self.workflow_recorded.recorded_workflows`, and runs `test_skip_steps`,
+        `test_out_of_order`, `test_replay_cross_session`, and `test_replay_unauthenticated` for each. Also runs
         `test_2fa_bypass` once across all config workflows."""
 
-        # Iterates each recorded worfklow, and runs all bypass test methods against it. 
+        # Iterates each recorded worfklow, and runs all bypass test methods against it.
         for workflow_name in self.workflow_recorder.recorded_workflows:
             logger.info("Running all bypass tests for workflow `%s`.", workflow_name)
             self.test_skip_steps(workflow_name)
@@ -423,5 +431,5 @@ class WorkflowBypassTester:
         self.test_2fa_bypass()
 
     def get_findings(self):
-        """ Returns `self.findings` accumuilated across all workflow bypass tests."""
+        """Returns `self.findings` accumuilated across all workflow bypass tests."""
         return self.findings

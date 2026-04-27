@@ -1,0 +1,138 @@
+
+╔══════════════════════════════════════════════════════════════╗
+║          Logic Flaw Scanner  v1.0.0                          ║
+║          Semi-Automated Web Vulnerability Discovery          ║
+╠══════════════════════════════════════════════════════════════╣
+║  Target   : http://localhost:8080                            ║
+║  Roles    : 3                                                ║
+║  Started  : 2026-04-27 21:22:36 UTC                          ║
+╚══════════════════════════════════════════════════════════════╝
+        
+  Target : http://localhost:8080
+  WARNING: Only scan systems you have explicit written authorisation to test.
+  Scanning without permission may be illegal under the Computer Misuse Act 1990.
+
+  Do you have authorisation to scan this target? [y/N]: 
+Authentication bypass confirmed at http://localhost:8080 (GET).
+Session Fixation confirmed: PHPSESSID was not regenerated after login at http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 1 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 2 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 3 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 4 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 5 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 6 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 7 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 8 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 9 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 10 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 11 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 12 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 13 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 14 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 15 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 16 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 17 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 18 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 19 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 20 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 21 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 22 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 23 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 24 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 25 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 26 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 27 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 28 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 29 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 30 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 31 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 32 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 33 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 34 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 35 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 36 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 37 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 38 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 39 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 40 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 41 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 42 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 43 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 44 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 45 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 46 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 47 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 48 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 49 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 50 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 51 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 52 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 53 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 54 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 55 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 56 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 57 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 58 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 59 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 60 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 61 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 62 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 63 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 64 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 65 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 66 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 67 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 68 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 69 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 70 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 71 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 72 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 73 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 74 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 75 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 76 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 77 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 78 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 79 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 80 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 81 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 82 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 83 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 84 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 85 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 86 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 87 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 88 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 89 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 90 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 91 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 92 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 93 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 94 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 95 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 96 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 97 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 98 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 99 for http://localhost:8080/login.php.
+Anomalous status 200 on login rate limit test at request 100 for http://localhost:8080/login.php.
+MEDIUM: Missing rate limiting confirmed on http://localhost:8080/login.php.
+HIGH: URL case variation bypass confirmed on http://localhost:8080/login.php.
+HIGH: URL case variation bypass confirmed on http://localhost:8080/login.php/.
+HIGH: URL case variation bypass confirmed on http://localhost:8080/login.php?.
+HIGH: URL case variation bypass confirmed on http://localhost:8080/login.php#.
+
+================================================================
+  SCAN COMPLETE
+================================================================
+  Target          : http://localhost:8080
+  Duration        : 69.9s
+  Endpoints found : 2
+  Requests sent   : 983
+  Total findings  : 7
+----------------------------------------------------------------
+  High         : 6
+  Medium       : 1
+================================================================
+  Reports saved to: reports/
+================================================================
+

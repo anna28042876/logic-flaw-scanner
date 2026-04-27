@@ -1,16 +1,16 @@
 """
 `scope.py`
 
-Scope control module. 
-Ensures that all discovered and tested URLs remain within defined scanning boundaries. 
-Prevents the scanner from accidentally targeting external systems, sensitive endpoints, 
-or areas explicitly excluded via configuration. 
-Provides the domain and subdomain restriction enforcement, path-based inclusion and 
+Scope control module.
+Ensures that all discovered and tested URLs remain within defined scanning boundaries.
+Prevents the scanner from accidentally targeting external systems, sensitive endpoints,
+or areas explicitly excluded via configuration.
+Provides the domain and subdomain restriction enforcement, path-based inclusion and
 exclusion logic, optional `robots.txt` parsing for ethical crawling behaviour, and URL
 filtering utilities for use by discovery and crawling elements of the project.
-Overall, acts as a safety and compliance layer that sits between the URL discovery and 
+Overall, acts as a safety and compliance layer that sits between the URL discovery and
 request execution layers, ensuring that the scanner stays within the bounds of its intended
-scope. 
+scope.
 """
 
 import re
@@ -24,23 +24,24 @@ logger = get_logger(__name__)
 
 
 class ScopeEnforcer:
-    """ 
+    """
     Enforces scanning boundaries across all phases of the pipeline.
     Instantiated once in `main.py` and passed to the `Crawler`, `SPACrawler`,
-    `ParameterEnumerator`, and all other test modules so that every URL 
+    `ParameterEnumerator`, and all other test modules so that every URL
     passes through a single consistent scope check before it is requested or
     test3ed.
     """
+
     def __init__(self, config):
         # Full `ScanConfig` stored so that `target_url`, `excluded_paths`, `verify_ssl`-
-        # and scope sub-keys are accessible without separate arguments. 
+        # and scope sub-keys are accessible without separate arguments.
         self.config = config
 
         # Populated by `fetch_robots_txt()` when `robots.txt` (true in `scan_config.yaml`)-
-        #- an empty list means no `robots.txt` restrictions apply.
+        # - an empty list means no `robots.txt` restrictions apply.
         self.disallowed_paths = []
 
-        # Extract netloc from `target_url` - used as the baseline allowed domain. 
+        # Extract netloc from `target_url` - used as the baseline allowed domain.
         # "localhost:3000" for JuiceShop.
         # "localhost:8080" for DVWA.
         parsed = urllib.parse.urlparse(config.target_url)
@@ -58,7 +59,7 @@ class ScopeEnforcer:
                 r"^(.+\.)?" + re.escape(base) + r"(:\d+)?$"
             )
         else:
-            # Single-host enforcement only which is correct for both Juice SHop and DVWA. 
+            # Single-host enforcement only which is correct for both Juice SHop and DVWA.
             self.subdomain_pattern = None
 
         # Called here so `disallowed_paths` is fully pipulated before the crawler makes first req.
@@ -68,7 +69,7 @@ class ScopeEnforcer:
     def fetch_robots_txt(self):
         """
         `GETs / robots.txt` from the target and parses each `Disallow` directive into `self.disallowed_paths`.
-        A 404 or connection failure sets `disallowed_paths` to `[]` and logs a warning so that the scan continues 
+        A 404 or connection failure sets `disallowed_paths` to `[]` and logs a warning so that the scan continues
         with the exclusions only defined in the `scan_config.yaml`.
         """
         robots_url = self.config.target_url.rstrip("/") + "/robots.txt"
@@ -90,10 +91,14 @@ class ScopeEnforcer:
                         # `syntax` is not added to `disallowed_paths`.
                         if path:
                             self.disallowed_paths.append(path)
-                logger.info(f"robots.txt parsed - {len(self.disallowed_paths)} disallowed path(s) found")
+                logger.info(
+                    f"robots.txt parsed - {len(self.disallowed_paths)} disallowed path(s) found"
+                )
             else:
-                # Juice Shop v17.1.1 and DVWA 1.9 serve no `robots.txt`, so a 404 here is expected in lab env. 
-                logger.warning(f"robots.txt not found at {robots_url} (status {response.status_code}) - continuing unrestricted")
+                # Juice Shop v17.1.1 and DVWA 1.9 serve no `robots.txt`, so a 404 here is expected in lab env.
+                logger.warning(
+                    f"robots.txt not found at {robots_url} (status {response.status_code}) - continuing unrestricted"
+                )
                 self.disallowed_paths = []
 
         except Exception as e:
@@ -109,14 +114,14 @@ class ScopeEnforcer:
         try:
             parsed = urllib.parse.urlparse(url)
         except Exception:
-            # Rejects malformed hrefs such as javascript, and data URIs extracted from Juice Shop's Angular frontend. 
+            # Rejects malformed hrefs such as javascript, and data URIs extracted from Juice Shop's Angular frontend.
             return False
 
         domain = parsed.netloc
         path = parsed.path
 
         # Juice Shop's HTML contains links to third-part CDNs - any domain that is not in the target host or an allowed-
-        # -subdomain  is rejected  here. 
+        # -subdomain  is rejected  here.
         if domain not in self.allowed_domains:
             if self.subdomain_pattern and self.subdomain_pattern.match(domain):
                 pass
@@ -124,14 +129,16 @@ class ScopeEnforcer:
                 return False
 
         # Rejects paths matching any `excluded_paths` regex from the `scan_config.yaml` file e.g., `/logout`,-
-        # #- or `/rest/user/reset` which would break the session state. 
+        # #- or `/rest/user/reset` which would break the session state.
         for pattern in self.config.excluded_paths:
             try:
                 if re.search(pattern, path):
                     return False
             except re.error:
                 # Malformed regex logs a warning and is skipped so one bad pattern in `scan_config.yaml` cannot abort the scan.
-                logger.warning(f"Invalid excluded_paths regex pattern: '{pattern}' - skipping")
+                logger.warning(
+                    f"Invalid excluded_paths regex pattern: '{pattern}' - skipping"
+                )
 
         scope = self.config.scope if isinstance(self.config.scope, dict) else {}
         if scope.get("robots_txt", False):
@@ -142,15 +149,17 @@ class ScopeEnforcer:
         # When set, restricts the scan to a specific section of the target, e.g., `/rest/` on Juice Shop or `/api/` only.
         allowed_paths = scope.get("allowed_paths", [])
         if allowed_paths:
-            if not any(path.startswith(prefix) for prefix in allowed_paths):
-                return False
+            # Always permits the root path through, as it is the crawler's seed entry point for discovering in-scope links.
+            if path not in ("", "/"):
+                if not any(path.startswith(prefix) for prefix in allowed_paths):
+                    return False
 
         return True
 
     def filter_urls(self, url_list: list) -> list:
-        """ 
-        Passes each URL through `is_in_scope()` and returns only those that pass the specified criteria. 
+        """
+        Passes each URL through `is_in_scope()` and returns only those that pass the specified criteria.
         Called by the `Crawler` and `SPACrawler` after each page crawl to remove  any out-of-scope URLs
-        before they enter the discovery queue. 
+        before they enter the discovery queue.
         """
         return [url for url in url_list if self.is_in_scope(url)]

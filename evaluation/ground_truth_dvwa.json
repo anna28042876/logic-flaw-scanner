@@ -1,0 +1,67 @@
+{
+  "metadata": {
+    "target": "DVWA",
+    "version": "v1.9",
+    "base_url": "http://localhost:8080",
+    "security_level": "low",
+    "selection_criteria": "All DVWA vulnerability modules at Low security level, that fall within the scanner's detection categories. Horizontal IDOR testing is limited by DVWA's absence of a built-in registration page. Additional user accounts are created via direct MySQL `INSERT` commands inside the Docker container, if horizontal auth testing is required. This ground truth reflects  that the modules the scanner can test reliably at `Low` security level.",
+    "total_entries": 5,
+    "category_counts": {
+      "broken_access_control": 2,
+      "broken_authentication": 2,
+      "security_misconfiguration": 1
+    }
+  },
+  "entries": [
+    {
+      "id": "DV-001",
+      "name": "Brute Force Login Has No Rate Limiting",
+      "category": "security_misconfiguration",
+      "endpoint": "/vulnerabilities/brute/",
+      "method": "GET",
+      "scanner_module": "rate_limit_detector",
+      "expected_behaviour": "Repeated `GET` requests with wrong credentials to `/vulnerabilities/brute/` must be throttled, or locked out after a configurable threshold. DVWA at `Low` security level applies no rate limiting, or account lockout mechanism aat all.",
+      "in_scope": true
+    },
+    {
+      "id": "DV-002",
+      "name": "CSRF Token Absent on Password Change Form",
+      "category": "broken_authentication",
+      "endpoint": "/vulnerabilities/csrf/",
+      "method": "POST",
+      "scanner_module": "csrf",
+      "expected_behaviour": "The password change form at `/vulnerabilities/csrf/` must include an unpredictable CSRF token, that the server validates on every submission. DVWA at `Low` security level omits this token entirely, allowing for cross-site request forgery.",
+      "in_scope": true
+    },
+    {
+      "id": "DV-003",
+      "name": "Vertical Privilege Escalation via Security Configuration",
+      "category": "broken_access_control",
+      "endpoint": "/security.php",
+      "method": "POST",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "A non-admin authenticated user, or unauthenticated session, submitting a `POST` request to `/security.php` to change the DVWA security level must receive 403, or be redirected. Only the admin role may modify the security configuration. `/security.php` is used by the admin role in `post_auth_steps` in `dvwa.yaml`, making it a confirmed admin-only endpoint for `vertical_auth.py` replay testing.",
+      "in_scope": true
+    },
+    {
+      "id": "DV-004",
+      "name": "Predictable Weak Session IDs Issued",
+      "category": "broken_authentication",
+      "endpoint": "/vulnerabilities/weak_id/",
+      "method": "GET",
+      "scanner_module": "session_fixation",
+      "expected_behaviour": "The `dvwaSession` cookie issued by `/vulnerabilities/weak_id/` must be cryptographically random, and unpredictable across repeated requests.  DVWA at `Low` security level generates sequential integer session IDs, which are trivially enumerable.",
+      "in_scope": true
+    },
+    {
+      "id": "DV-005",
+      "name": "Forced Browsing Exposes PHP Configuration Page",
+      "category": "broken_access_control",
+      "endpoint": "/phpinfo.php",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "The PHP configuration page at `/phpinfo.php` must not be accessible to unauthenticated users. DVWA exposes this page without any authentication requirement, leaking full server configuration, installed extensions, and environment variables.",
+      "in_scope": true
+    }
+  ]
+}
