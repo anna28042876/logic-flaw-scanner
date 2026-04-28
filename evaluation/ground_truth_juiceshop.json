@@ -80,7 +80,7 @@
       "endpoint": "/rest/user/logout",
       "method": "POST",
       "scanner_module": "session_termination",
-      "expected_behaviour": "After a successful `POST` to `/rest/user/logout`, any subsequent request using the previously issued JWT must receive 401. Juice Shop doesn't have a token blacklist, so the old token remains accepted by the server.",
+      "expected_behaviour": "After a successful `POST` to `/rest/user/logout`, any subsequent request using the previously issued JWT must receive 401. Juice Shop does not have a token blacklist, so the old token remains accepted by the server.",
       "in_scope": true
     },
     {
@@ -140,7 +140,7 @@
       "endpoint": "/rest/basket/{id}/checkout",
       "method": "POST",
       "scanner_module": "workflow_bypass",
-      "expected_behaviour": "Submitting the checkout confirmation request without completing the intermediate address, delivery, and payment steps must return 400,  or 403. Juice Shop doesn't enforce server-side workflow state, so the order is placed, regardless of which prior steps were completed.",
+      "expected_behaviour": "Submitting the checkout confirmation request without completing the intermediate address, delivery, and payment steps must return 400,  or 403. Juice Shop does not enforce server-side workflow state, so the order is placed, regardless of which prior steps were completed.",
       "in_scope": true
     }
   ]

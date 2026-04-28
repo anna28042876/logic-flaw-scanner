@@ -20,7 +20,7 @@
       "endpoint": "/vulnerabilities/brute/",
       "method": "GET",
       "scanner_module": "rate_limit_detector",
-      "expected_behaviour": "Repeated `GET` requests with wrong credentials to `/vulnerabilities/brute/` must be throttled, or locked out after a configurable threshold. DVWA at `Low` security level applies no rate limiting, or account lockout mechanism aat all.",
+      "expected_behaviour": "Repeated `GET` requests with wrong credentials to `/vulnerabilities/brute/` must be throttled, or locked out after a configurable threshold. DVWA at `Low` security level applies no rate limiting, or account lockout mechanism at all.",
       "in_scope": true
     },
     {
@@ -28,7 +28,7 @@
       "name": "CSRF Token Absent on Password Change Form",
       "category": "broken_authentication",
       "endpoint": "/vulnerabilities/csrf/",
-      "method": "POST",
+      "method": "GET",
       "scanner_module": "csrf",
       "expected_behaviour": "The password change form at `/vulnerabilities/csrf/` must include an unpredictable CSRF token, that the server validates on every submission. DVWA at `Low` security level omits this token entirely, allowing for cross-site request forgery.",
       "in_scope": true
@@ -55,12 +55,12 @@
     },
     {
       "id": "DV-005",
-      "name": "Forced Browsing Exposes PHP Configuration Page",
+      "name": "PHP Configuration Page Exposed to Authenticated Users",
       "category": "broken_access_control",
       "endpoint": "/phpinfo.php",
       "method": "GET",
-      "scanner_module": "unauth_access",
-      "expected_behaviour": "The PHP configuration page at `/phpinfo.php` must not be accessible to unauthenticated users. DVWA exposes this page without any authentication requirement, leaking full server configuration, installed extensions, and environment variables.",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "The PHP configuration page at `/phpinfo.php` must not be accessible to low-privilege authenticated users. DVWA requires authentication to reach this page but applies no role check, meaning any authenticated user regardless of security level receives the full PHP environment dump, leaking server configuration, installed extensions, and environment variables.",
       "in_scope": true
     }
   ]
