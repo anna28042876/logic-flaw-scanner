@@ -27,7 +27,7 @@ scope:
   robots_txt: false
 
 login:
-  # Juice Shop does not use an HTML login formc, credentials are sent as JSON to its REST API.
+  # Juice Shop does not use an HTML login form, credentials are sent as JSON to its REST API.
   login_url: "http://localhost:3000/rest/user/login"
   login_method: POST
   username_field: "email"
@@ -69,6 +69,17 @@ rate_limit:
   # Starting at 10 requests per second avoids Juice Shop degradation inside the Kali VM.
   requests_per_second: 10
   total_requests: 100
+  # Explicitly listed critical endpoints for rate limit detection.
+  # `/api/Users` POST is included to cover JS-011: mass account creation rate limiting.
+  critical_endpoints:
+    - url: "/rest/user/login"
+      method: POST
+    - url: "/rest/user/reset-password"
+      method: POST
+    - url: "/rest/user/authentication-details/"
+      method: GET
+    - url: "/api/Users"
+      method: POST
   # Headers rotated to test whether Juice Shop rate limiting is bound to the IP address.
   bypass_headers:
     - "X-Forwarded-For"
@@ -76,14 +87,27 @@ rate_limit:
     - "X-Remote-IP"
     - "X-Client-IP"
     - "X-Real-IP"
-  # automatically escalates if no 429 responses are observed at the lower tier.
+  # Automatically escalates if no 429 responses are observed at the lower tier.
   rate_limit_tiers:
     - { rps: 10,  count: 100 }
     - { rps: 25,  count: 150 }
     - { rps: 50,  count: 200 }
 
+# Statically declared admin-only endpoints for vertical_auth.py to test regardless of crawl
+# differentiation. These endpoints return 200 for admin but must return 401 or 403 for
+# non-admin authenticated sessions. Both were missed in the initial scan because all three
+# crawl roles discovered them, preventing the `discovered_by_roles == ["admin"]` heuristic
+# from flagging them.
+known_admin_endpoints:
+  - url: "/api/Users"
+    method: GET
+  - url: "/api/Complaints"
+    method: GET
+
 # Add-to-basket then checkout - primary workflow test case for Juice Shop.
-# Basket ID must be resolved via pre-step GET prior to executing main steps
+# Pre-step resolves the authenticated user's basket ID via GET /rest/user/whoami.
+# In Juice Shop v17.1.1, every user's basket ID equals their user ID, so the whoami
+# user.id field is used directly as the basket ID for all subsequent workflow steps.
 # WorkflowRecorder substitutes all `{{pre.*}}` and `{{token}}` placeholders at runtime.
 # Success response: 200 OK with `orderConfirmation` field in the JSON body.
 # Failure responses: 401 (no session), 403 (wrong role or basket ownership violation), 400 (malformed body).
@@ -91,16 +115,17 @@ workflows:
   - name: "add_to_basket_and_checkout"
 
     # Pre-steps run before main steps, and extract values needed as placeholders.
-    # `GET /rest/basket/{{user_id}}` resolves the authenticated user's basket ID at runtime.
+    # `GET /rest/user/whoami` returns {"user": {"id": N, ...}} for the authenticated session.
+    # `user.id` is used as the basket ID because Juice Shop assigns basket ID == user ID.
     pre_steps:
       - name: "discover_basket_id"
         method: GET
-        path: "/rest/basket/{{user_id}}"
+        path: "/rest/user/whoami"
         expected_status: 200
         extract:
           - name: "user_basket_id"
             source: "json"
-            path: "data.id"
+            path: "user.id"
 
     steps:
       - name: "add_item_to_basket"
@@ -128,3 +153,6 @@ workflows:
 reporting:
   output_dir: "reports/"
   format: "both"
+
+# Fixed seed for all random number generators to ensure byte-identical reports across runs.
+random_seed: 42

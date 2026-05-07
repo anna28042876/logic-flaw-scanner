@@ -34,6 +34,22 @@ class WorkflowBypassTester:
         self.comparator = comparator
         # COnsolidates all the confirmed bypass findings as `VUlnerability` objects.
         self.findings = []
+    
+    def __init__(
+        self, config, http_client, session_manager, workflow_recorder, comparator
+    ):
+        """Stores `config`, `http_client`, `session_manager`, `workflow_recorder`, and `comparator`.
+        Initialises `self.findings` as an empty list, ready to accumulate bypass findings."""
+
+        self.config = config
+        self.http_client = http_client
+        self.session_manager = session_manager
+        self.workflow_recorder = workflow_recorder
+        self.comparator = comparator
+        # COnsolidates all the confirmed bypass findings as `VUlnerability` objects.
+        self.findings = []
+        # Seeds the random number generator with the fixed seed from `config` for reproducibility.
+        random.seed(config.random_seed)
 
     def _replay_step(self, step, session_kwargs=None):
         """Replays a single recorded step dictionary using `session_kwargs` when called from cross-session,

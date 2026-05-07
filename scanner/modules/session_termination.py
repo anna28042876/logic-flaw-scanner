@@ -382,6 +382,12 @@ class SessionTerminationValidator:
             if cred.get("role") != "admin"
         ]
 
+        # G2: Guards against running with zero applicable roles before the log line, avoiding
+        # the misleading "Running session termination tests for 0 non-admin roles: []" entry.
+        if not roles:
+            logger.debug("No non-admin roles configured — skipping session termination tests.")
+            return
+
         logger.info(
             f"Running session termination tests for {len(roles)} non-admin roles: {roles}."
         )

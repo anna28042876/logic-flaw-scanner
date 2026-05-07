@@ -152,9 +152,22 @@ class WorkflowRecorder:
             if body and isinstance(body, dict):
                 body_str = self._substitute_tokens(json.dumps(body), token_store)
                 body = json.loads(body_str)
-            # Substitutes token placeholders inside a raw string body directly.
+            # Substitutes token placeholders inside a raw string body, then parses the
+            # substituted text back to a dict. The juiceshop.yaml workflow specifies the
+            # body as a JSON-encoded string for placeholder readability; without this
+            # parse step, `http_client.post(json_body=body)` would JSON-encode the string
+            # itself, sending '"{...}"' to the server instead of an object — Juice Shop
+            # then returns an error, and the `data.id` extraction raises a KeyError.
             elif body and isinstance(body, str):
                 body = self._substitute_tokens(body, token_store)
+                try:
+                    body = json.loads(body)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+                try:
+                    body = json.loads(body)
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    pass
 
             # Fetches the target page, and extracts a CSRF token when the step declares a form content type.
             if "form" in content_type:
@@ -195,6 +208,17 @@ class WorkflowRecorder:
                 if step.get("_is_pre_step"):
                     for key, value in extracted.items():
                         token_store[f"pre.{key}"] = value
+                    # Fallback for Juice Shop: basket ID equals user ID. If `pre.user_basket_id` was not
+                    # extracted from the whoami response (e.g., the endpoint returned an empty user object
+                    # due to a session delivery issue), seed it from the JWT-decoded `user_id` that
+                    # `_build_identity_tokens` placed in the token store before recording began.
+                    if "pre.user_basket_id" not in token_store and "user_id" in token_store:
+                        token_store["pre.user_basket_id"] = token_store["user_id"]
+                        logger.debug(
+                            "Seeded `pre.user_basket_id` from JWT-decoded `user_id` (%s) "
+                            "because whoami extraction did not return an id field.",
+                            token_store["user_id"],
+                        )
 
             # Builds the recorded step dict, capturing the full request, and response for replay by `WorkflowBypassTester`
             recorded_step = {

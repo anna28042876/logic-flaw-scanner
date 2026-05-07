@@ -1,0 +1,258 @@
+{
+  "@programName": "ZAP",
+  "@version": "2.17.0",
+  "@generated": "Wed, 6 May 2026 22:48:43",
+  "created": "2026-05-07T02:48:43.143779129Z",
+  "insights": [
+    {
+      "level": "Medium",
+      "reason": "Exceeded Low",
+      "site": "",
+      "key": "insight.memory.usage",
+      "description": "Percentage of memory used",
+      "statistic": "80"
+    },
+    {
+      "level": "Low",
+      "reason": "Warning",
+      "site": "",
+      "key": "insight.log.error",
+      "description": "ZAP errors logged - see the zap.log file for details",
+      "statistic": "3"
+    },
+    {
+      "level": "Low",
+      "reason": "Warning",
+      "site": "",
+      "key": "insight.log.warn",
+      "description": "ZAP warnings logged - see the zap.log file for details",
+      "statistic": "12"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://cdnjs.cloudflare.com",
+      "key": "insight.code.2xx",
+      "description": "Percentage of responses with status code 2xx",
+      "statistic": "100"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://cdnjs.cloudflare.com",
+      "key": "insight.endpoint.ctype.application/javascript",
+      "description": "Percentage of endpoints with content type application/javascript",
+      "statistic": "66"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://cdnjs.cloudflare.com",
+      "key": "insight.endpoint.ctype.text/css",
+      "description": "Percentage of endpoints with content type text/css",
+      "statistic": "33"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://cdnjs.cloudflare.com",
+      "key": "insight.endpoint.method.GET",
+      "description": "Percentage of endpoints with method GET",
+      "statistic": "100"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://cdnjs.cloudflare.com",
+      "key": "insight.endpoint.total",
+      "description": "Count of total endpoints",
+      "statistic": "3"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://cdnjs.cloudflare.com",
+      "key": "insight.response.slow",
+      "description": "Percentage of slow responses",
+      "statistic": "50"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.code.1xx",
+      "description": "Percentage of responses with status code 1xx",
+      "statistic": "1"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.code.2xx",
+      "description": "Percentage of responses with status code 2xx",
+      "statistic": "81"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.code.3xx",
+      "description": "Percentage of responses with status code 3xx",
+      "statistic": "2"
+    },
+    {
+      "level": "Info",
+      "reason": "Exceeded Low",
+      "site": "http://localhost:3000",
+      "key": "insight.code.4xx",
+      "description": "Percentage of responses with status code 4xx",
+      "statistic": "14"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.code.5xx",
+      "description": "Percentage of responses with status code 5xx",
+      "statistic": "1"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.ctype.application/javascript",
+      "description": "Percentage of endpoints with content type application/javascript",
+      "statistic": "1"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.ctype.application/json",
+      "description": "Percentage of endpoints with content type application/json",
+      "statistic": "4"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.ctype.application/octet-stream",
+      "description": "Percentage of endpoints with content type application/octet-stream",
+      "statistic": "1"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.ctype.font/woff",
+      "description": "Percentage of endpoints with content type font/woff",
+      "statistic": "1"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.ctype.font/woff2",
+      "description": "Percentage of endpoints with content type font/woff2",
+      "statistic": "1"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.ctype.image/jpeg",
+      "description": "Percentage of endpoints with content type image/jpeg",
+      "statistic": "5"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.ctype.image/png",
+      "description": "Percentage of endpoints with content type image/png",
+      "statistic": "1"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.ctype.image/svg+xml",
+      "description": "Percentage of endpoints with content type image/svg+xml",
+      "statistic": "9"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.ctype.image/x-icon",
+      "description": "Percentage of endpoints with content type image/x-icon",
+      "statistic": "1"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.ctype.text/css",
+      "description": "Percentage of endpoints with content type text/css",
+      "statistic": "1"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.ctype.text/html",
+      "description": "Percentage of endpoints with content type text/html",
+      "statistic": "73"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.ctype.text/markdown",
+      "description": "Percentage of endpoints with content type text/markdown",
+      "statistic": "1"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.ctype.text/plain",
+      "description": "Percentage of endpoints with content type text/plain",
+      "statistic": "1"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.method.GET",
+      "description": "Percentage of endpoints with method GET",
+      "statistic": "99"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.method.POST",
+      "description": "Percentage of endpoints with method POST",
+      "statistic": "1"
+    },
+    {
+      "level": "Info",
+      "reason": "Informational",
+      "site": "http://localhost:3000",
+      "key": "insight.endpoint.total",
+      "description": "Count of total endpoints",
+      "statistic": "431"
+    },
+    {
+      "level": "Info",
+      "reason": "Exceeded Low",
+      "site": "http://localhost:3000",
+      "key": "insight.response.slow",
+      "description": "Percentage of slow responses",
+      "statistic": "7"
+    }
+  ],
+  "site": [],
+  "sequences": []
+}

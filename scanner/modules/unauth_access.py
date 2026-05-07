@@ -39,6 +39,9 @@ class UnauthAccessChecker:
         self.comparator = comparator
         self.scope = ScopeEnforcer(config)
         self.findings = []
+        # Stores normalised public endpoint paths populated during test_all, used by
+        # test_forced_browsing to suppress hits on already known public resources.
+        self._public_url_norms = set()
 
     def test_endpoint(self, endpoint):
         """Sends both authenticated, and unauthenticated, requests to the same endpoint, then compares
@@ -52,15 +55,48 @@ class UnauthAccessChecker:
             )
             return
 
+        # Issue 4: Skips endpoints discovered during the unauthenticated crawl pass — the
+        # crawler sets `requires_auth=False` on these because they are public by design
+        # (e.g. /api/Products, /api/Feedbacks, /#/score-board on Juice Shop). Testing them
+        # for authentication bypass guarantees a false positive on every one.
+        if hasattr(endpoint, "requires_auth") and not endpoint.requires_auth:
+            logger.debug(
+                f"{endpoint.url} does not require authentication "
+                f"(discovered unauthenticated) — skipping bypass check."
+            )
+            return
+
+        # B3: Skips the configured login URL — it is a public endpoint by definition
+        # and must be reachable without authentication.
+        _login_url = self.config.login_config.get("login_url", "")
+        if _login_url and endpoint.url.rstrip("/") == _login_url.rstrip("/"):
+            logger.debug(
+                f"Skipping login endpoint {endpoint.url} — public by definition, not an authentication bypass."
+            )
+            return
+
+        # B1: Determines the authenticated session key, falling back to the first
+        # available role when user_a is not configured on the target.
+        auth_role = (
+            "user_a"
+            if "user_a" in self.session_manager.sessions
+            else next(iter(self.session_manager.sessions), None)
+        )
+        if auth_role is None:
+            logger.debug(
+                f"No authenticated sessions available, skipping unauthenticated access check for {endpoint.url}."
+            )
+            return
+
         # Sends a GET or POST request to the endpoint URL using the `user_a` authenticated session from `http_client`.
         try:
             if endpoint.method.upper() == "POST":
                 response_auth = self.http_client.send_request(
-                    "POST", endpoint.url, session_key="user_a"
+                    "POST", endpoint.url, session_key=auth_role
                 )[0]
             else:
                 response_auth = self.http_client.send_request(
-                    "GET", endpoint.url, session_key="user_a"
+                    "GET", endpoint.url, session_key=auth_role
                 )[0]
         except Exception as exc:
             logger.warning(f"Authenticated request to {endpoint.url} failed: {exc}")
@@ -220,6 +256,16 @@ class UnauthAccessChecker:
                 )
                 continue
 
+            # Issue 2: Skips paths that were already discovered during the unauthenticated crawl
+            # pass and therefore have requires_auth=False. Those endpoints are publicly reachable
+            # by design and wordlist hits against them are not forced browsing vulnerabilities.
+            url_path = url.replace(self.config.target_url.rstrip("/"), "").rstrip("/").lower()
+            if url_path in self._public_url_norms or (url_path + "/") in self._public_url_norms:
+                logger.debug(
+                    f"{url} matches a known public crawled endpoint, skipping forced browsing flag."
+                )
+                continue
+
             vuln = Vulnerability(
                 vuln_type="Forced Browsing - Unprotected Resource",
                 severity="Medium",
@@ -247,6 +293,14 @@ class UnauthAccessChecker:
         logger.info(
             f"Running unauthenticated access checks across {len(endpoints)} endpoints."
         )
+
+        # Populates the public URL set from endpoints that do not require authentication, so that
+        # test_forced_browsing can skip wordlist hits against already known public resources.
+        base = self.config.target_url.rstrip("/")
+        for endpoint in endpoints:
+            if hasattr(endpoint, "requires_auth") and not endpoint.requires_auth:
+                path = endpoint.url.replace(base, "").rstrip("/").lower()
+                self._public_url_norms.add(path)
 
         # Calls `test_endpoint` on each endpoint, to run the full unauthenticated access check across the list.
         for endpoint in endpoints:

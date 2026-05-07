@@ -108,6 +108,11 @@ FALLBACK_WORDLIST = [
     "coupon_id",
 ]
 
+# Number of consecutive 429 responses that triggers an early abort of fuzzing for an endpoint.
+# Juice Shop's reset-password endpoint rate-limits immediately and returns 429 for every probe,
+# causing the enumerator to misclassify every wordlist entry as a discovered parameter.
+RATE_LIMIT_ABORT_THRESHOLD = 5
+
 
 class ParameterEnumerator:
     """Extracts, enumerates, and fuzzes parameters from discovered endpoints."""
@@ -216,7 +221,15 @@ class ParameterEnumerator:
         # Attempts to read the wordlist file and falls back to the hardcoded list if it is absent.
         try:
             with open(WORDLIST_PATH, "r") as f:
-                names = [line.strip() for line in f if line.strip()]
+                # Filter blank lines AND comment lines — wordlist headers like
+                # "## Vulnerability Scanner Parameter Wordlist" and "# IDOR ..." would
+                # otherwise be fuzzed as parameter names, producing the 886-parameter
+                # explosion seen on rest/image-captcha/ and similar endpoints.
+                names = [
+                    line.strip()
+                    for line in f
+                    if line.strip() and not line.strip().startswith("#")
+                ]
             logger.debug(f"Loaded {len(names)} parameter names from {WORDLIST_PATH}")
             return names
         except FileNotFoundError:
@@ -230,7 +243,13 @@ class ParameterEnumerator:
         """Sends a baseline request to `endpoint`, and then probes each wordlist parameter
         name for a detectable response difference in the status code, body length, or
         response time. Only fuzzes JSON endpoints, endpoints with fewer than 3 known parameters,
-        or endpoints whose URL matches a sensitive path such as '/admin', '/user', `/account`, or `/api`."""
+        or endpoints whose URL matches a sensitive path such as '/admin', '/user', `/account`, or `/api`.
+
+        Aborts early if the endpoint returns RATE_LIMIT_ABORT_THRESHOLD or more consecutive 429
+        responses, which indicates the target is rate-limiting the probe stream. Treating every
+        429 as a discovery would produce thousands of spurious findings (e.g. Juice Shop's
+        /rest/user/reset-password), so the function returns only the parameters discovered before
+        the rate limit was hit."""
 
         url = endpoint.url
         method = endpoint.method.upper()
@@ -275,8 +294,19 @@ class ParameterEnumerator:
         if baseline is None:
             return []
 
+        # If the baseline itself is a 429, the endpoint is already rate-limited before fuzzing begins.
+        # Continuing would cause every probe to register as a change from the non-429 expected baseline,
+        # producing a false discovery for every wordlist entry.
+        if baseline.status_code == 429:
+            logger.info(
+                f"Baseline returned 429 for {url} — endpoint is already rate-limited, skipping fuzzing."
+            )
+            return []
+
         baseline_status = baseline.status_code
         baseline_length = len(baseline.content)
+
+        consecutive_429s = 0
 
         # Sends one probe request per wordlist entry, then compares the response against the baseline.
         for param_name in wordlist:
@@ -299,6 +329,23 @@ class ParameterEnumerator:
             # Skips wordlist entries that produced no response from the target.
             if response is None:
                 continue
+
+            # Tracks consecutive 429 responses to detect rate-limiting mid-fuzz. Once the threshold
+            # is reached, all further probes would return 429 regardless of the parameter name, making
+            # any subsequent status or length delta meaningless as a discovery signal.
+            if response.status_code == 429:
+                consecutive_429s += 1
+                if consecutive_429s >= RATE_LIMIT_ABORT_THRESHOLD:
+                    logger.info(
+                        f"{consecutive_429s} consecutive 429 responses on {url} — "
+                        f"rate limit detected mid-fuzz, aborting parameter enumeration early. "
+                        f"{len(discovered)} parameter(s) recorded before rate limit."
+                    )
+                    break
+                continue
+            else:
+                # Resets the counter whenever a non-429 response is received.
+                consecutive_429s = 0
 
             # Calculates the boolean flags for status code, body length, and the response time differences against the baseline.
             status_changed = response.status_code != baseline_status
@@ -348,9 +395,22 @@ class ParameterEnumerator:
         parameters, and then fuzzes for hidden parameters, flagging ID fields. Stores
         the combined `Parameter` list in `self.endpoint_params`, keyed by endpoint URL."""
 
+        # L3: Tracks already-processed URLs to prevent duplicate enumeration when the same URL
+        # appears with different HTTP methods in the endpoint list, which would produce paired
+        # log entries such as "Enumerated 5 parameters" then "Enumerated 4 parameters" for the
+        # same URL.
+        seen_urls = set()
+
         # Iterates each endpoint, extracting and fuzzing the parameters, then storing the results.
         for endpoint in endpoints:
             url = endpoint.url
+
+            # Skips URLs that have already been enumerated in this run.
+            if url in seen_urls:
+                logger.debug(f"Skipping already-enumerated URL: {url}")
+                continue
+            seen_urls.add(url)
+
             all_params = []
 
             all_params.extend(self._extract_url_params(url))

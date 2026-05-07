@@ -1,0 +1,25 @@
+{
+  "scanner": {
+    "juiceshop": {
+      "duration_seconds": 4916,
+      "total_requests": 58760
+    },
+    "dvwa": {
+      "duration_seconds": 2887,
+      "total_requests": 40738
+    }
+  },
+  "zap": {
+    "juiceshop": {
+      "duration_seconds": 2940,
+      "total_requests": 431
+    }
+  },
+  "burp_community": {
+    "juiceshop": {
+      "duration_seconds": 180,
+      "total_requests": 44,
+      "note": "Passive only. Request count taken from History tab sequence number."
+    }
+  }
+}

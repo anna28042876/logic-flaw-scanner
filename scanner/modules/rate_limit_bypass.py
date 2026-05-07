@@ -33,6 +33,18 @@ class RateLimitBypassTester:
         # Accumulates all confirmed bypass findings as `Vulnerability` objects.
         self.findings = []
 
+    def __init__(self, config, http_client, detection_results):
+        """Stores `config`, `http_client`, and `detection_Results` from `RateLimitDetector`. Initialises
+        `self.findings` as an empty list, ready to accumulate the bypass findings."""
+        self.config = config
+        self.http_client = http_client
+        # Holds the per-endpoint detection outcomes, produced by `RateLimitDetector`, for baseline comparisons.
+        self.detection_results = detection_results
+        # Accumulates all confirmed bypass findings as `Vulnerability` objects.
+        self.findings = []
+        # Seeds the random number generator with the fixed seed from `config` for reproducibility.
+        random.seed(config.random_seed)
+
     def _generate_random_ip(self):
         """Generates a random IPv4 address in the public range, avoiding reserved prefixes, for use as a spoofed
         value in IP bypass header tests."""
@@ -265,47 +277,71 @@ class RateLimitBypassTester:
         path = parsed.path.rstrip("/")
 
         # Generates case , and punctuation variants, of the endpoint path to test the URL normalisation in the rate limiter.
+        # B4: Fragment (#) and bare query string (?) variants are excluded — the # character is never
+        # transmitted to the server, and an empty query string renders identically to the canonical URL.
         variants = [
             base + path.capitalize(),
             base + path.upper(),
             base + path + "/",
-            base + path + "?",
-            base + path + "#",
             base + path + "%20",
         ]
 
+        # B4: Only run when the canonical endpoint is already rate-limited — a single-request 200
+        # check is not a valid bypass signal. Sends a burst of 50 requests per variant instead.
+        baseline = self._get_baseline_429_count(endpoint_url)
+        if baseline == 0:
+            logger.debug(
+                "Skipping URL case variation bypass test for %s — no baseline rate limiting detected.",
+                endpoint_url,
+            )
+            return
+
+        successful_variants = []
+
         # Sends a POST request to each URL variant, and flags any that return 200 - indicates a bypass.
         for variant_url in variants:
-            try:
-                response, _ = self.http_client.post(variant_url)
-                # Flags a 'High' finding, if the variant URL returned 200, bypassing the rate limiter.
-                if response is not None and response.status_code == 200:
-                    vuln = Vulnerability(
-                        vuln_type="Rate Limit Bypass via URL Case Variation",
-                        severity="High",
-                        endpoint=variant_url,
-                        method="POST",
-                        evidence=(
-                            f"URL variant `{variant_url}` returned HTTP 200 "
-                            f"where the canonical URL is rate limited."
-                        ),
-                        description=(
-                            f"The rate limiter on {endpoint_url} does not "
-                            f"normalise the request URL. The variant `{variant_url}` "
-                            f"bypasses rate limiting by routing to the same handler "
-                            f"via a differently cased or suffixed path."
-                        ),
+            responses = []
+            for _ in range(50):
+                try:
+                    response, _ = self.http_client.post(variant_url)
+                    responses.append(response)
+                except Exception as exc:
+                    logger.debug(
+                        "URL case variation request to %s raised an exception: %s",
+                        variant_url,
+                        exc,
                     )
-                    self.findings.append(vuln)
-                    logger.warning(
-                        "HIGH: URL case variation bypass confirmed on %s.", variant_url
-                    )
-            except Exception as exc:
-                logger.warning(
-                    "URL case variation request to %s raised an exception: %s",
-                    variant_url,
-                    exc,
-                )
+                    responses.append(None)
+
+            # Flags a 'High' finding, if the variant URL returned 200, bypassing the rate limiter.
+            count_429 = self._count_429s(responses)
+            if count_429 < baseline * BYPASS_SUCCESS_RATIO:
+                successful_variants.append(variant_url)
+
+        # B5: Consolidates all successful variants into a single finding to avoid inflating finding counts.
+        if successful_variants:
+            vuln = Vulnerability(
+                vuln_type="Rate Limit Bypass via URL Case Variation",
+                severity="High",
+                endpoint=endpoint_url,
+                method="POST",
+                evidence=(
+                    f"The following URL variants produced fewer than "
+                    f"{int(baseline * BYPASS_SUCCESS_RATIO)} 429 responses against a "
+                    f"baseline of {baseline}: {', '.join(successful_variants)}."
+                ),
+                description=(
+                    f"The rate limiter on {endpoint_url} does not "
+                    f"normalise the request URL. Variant paths route to the same handler "
+                    f"while bypassing the rate limit."
+                ),
+            )
+            self.findings.append(vuln)
+            logger.warning(
+                "HIGH: URL case variation bypass confirmed on %s via: %s.",
+                endpoint_url,
+                ", ".join(successful_variants),
+            )
 
     def test_method_switching(self, endpoint_url):
         """Sends 50 PUT, and 50 PATCH requests to `endpoint_url`, and compares the 429 count against the POST baseline.

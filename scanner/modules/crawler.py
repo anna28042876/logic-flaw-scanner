@@ -277,7 +277,9 @@ class Crawler:
                 """ Registers each form's action URL as a distinct `Endpoint`. Covers POST-only targets like Juice Shop's 
                 checkout and DVWA's login that never appears as anchor links."""
                 for form in page_forms:
-                    self._add_endpoint(form["action"], form["method"], role)
+                    # Scope-checks the form action before registering, so out-of-scope actions are never added as endpoints.
+                    if self.scope_enforcer.is_in_scope(form["action"]):
+                        self._add_endpoint(form["action"], form["method"], role)
 
                 # Enqueues unvisitied links and API hints for the next BFS depth level.
                 for link in links + api_hints + js_hints:

@@ -146,6 +146,12 @@ class ResponseComparator:
     def is_data_leak(self, resp_a_body, resp_b_body, role_a_identifier=None):
         # Attempts to detect any data leakages between two responses.
         # Typically used when comparing responses from different user roles.
+        # Accepts either response objects or raw body strings, normalising both to text
+        # before parsing. Callers in `horizontal_auth.py` pass response objects directly.
+        if hasattr(resp_a_body, "text"):
+            resp_a_body = resp_a_body.text
+        if hasattr(resp_b_body, "text"):
+            resp_b_body = resp_b_body.text
 
         # Tries to parse both bodies as JSON to allow for a structured comparison.
         try:

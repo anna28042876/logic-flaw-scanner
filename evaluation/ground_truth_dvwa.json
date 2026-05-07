@@ -15,12 +15,12 @@
   "entries": [
     {
       "id": "DV-001",
-      "name": "Brute Force Login Has No Rate Limiting",
+      "name": "Login Endpoint Has No Rate Limiting",
       "category": "security_misconfiguration",
-      "endpoint": "/vulnerabilities/brute/",
-      "method": "GET",
+      "endpoint": "/login.php",
+      "method": "POST",
       "scanner_module": "rate_limit_detector",
-      "expected_behaviour": "Repeated `GET` requests with wrong credentials to `/vulnerabilities/brute/` must be throttled, or locked out after a configurable threshold. DVWA at `Low` security level applies no rate limiting, or account lockout mechanism at all.",
+      "expected_behaviour": "Repeated POST requests with wrong credentials to /login.php must be throttled or locked out after a configurable threshold. DVWA at Low security level applies no rate limiting to the main login endpoint.",
       "in_scope": true
     },
     {
@@ -62,6 +62,206 @@
       "scanner_module": "vertical_auth",
       "expected_behaviour": "The PHP configuration page at `/phpinfo.php` must not be accessible to low-privilege authenticated users. DVWA requires authentication to reach this page but applies no role check, meaning any authenticated user regardless of security level receives the full PHP environment dump, leaking server configuration, installed extensions, and environment variables.",
       "in_scope": true
+    },
+    {
+      "id": "DV-OOS-01",
+      "name": "DVWA / Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves / without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-02",
+      "name": "DVWA /instructions.php Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/instructions.php",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves /instructions.php without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-03",
+      "name": "DVWA /vulnerabilities/brute/ Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/vulnerabilities/brute/",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves /vulnerabilities/brute/ without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-04",
+      "name": "DVWA /vulnerabilities/exec/ Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/vulnerabilities/exec/",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves /vulnerabilities/exec/ without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-05",
+      "name": "DVWA /vulnerabilities/csrf/ Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/vulnerabilities/csrf/",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves /vulnerabilities/csrf/ without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-06",
+      "name": "DVWA /vulnerabilities/fi/ Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/vulnerabilities/fi/",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves /vulnerabilities/fi/ without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-07",
+      "name": "DVWA /vulnerabilities/upload/ Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/vulnerabilities/upload/",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves /vulnerabilities/upload/ without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-08",
+      "name": "DVWA /vulnerabilities/captcha/ Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/vulnerabilities/captcha/",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves /vulnerabilities/captcha/ without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-09",
+      "name": "DVWA /vulnerabilities/sqli/ Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/vulnerabilities/sqli/",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves /vulnerabilities/sqli/ without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-10",
+      "name": "DVWA /vulnerabilities/sqli_blind/ Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/vulnerabilities/sqli_blind/",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves /vulnerabilities/sqli_blind/ without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-11",
+      "name": "DVWA /vulnerabilities/xss_r/ Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/vulnerabilities/xss_r/",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves /vulnerabilities/xss_r/ without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-12",
+      "name": "DVWA /vulnerabilities/xss_s/ Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/vulnerabilities/xss_s/",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves /vulnerabilities/xss_s/ without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-13",
+      "name": "DVWA /about.php Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/about.php",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves /about.php without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-14",
+      "name": "DVWA /ids_log.php Accessible Without Auth (By Design at Low Security)",
+      "category": "broken_access_control",
+      "endpoint": "/ids_log.php",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "DVWA at Low security genuinely serves /ids_log.php without authentication. This is by design and not a scanner false positive in the traditional sense.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-15",
+      "name": "DVWA /about.php Accessible Without Auth (Forced Browsing by Design)",
+      "category": "broken_access_control",
+      "endpoint": "/about.php",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "DVWA at Low security genuinely serves /about.php without authentication. Wordlist hits on these paths are not unexpected forced browsing vulnerabilities.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-16",
+      "name": "DVWA /instructions.php Accessible Without Auth (Forced Browsing by Design)",
+      "category": "broken_access_control",
+      "endpoint": "/instructions.php",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "DVWA at Low security genuinely serves /instructions.php without authentication. Wordlist hits on these paths are not unexpected forced browsing vulnerabilities.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-17",
+      "name": "DVWA /hackable/uploads/ Accessible Without Auth (Forced Browsing by Design)",
+      "category": "broken_access_control",
+      "endpoint": "/hackable/uploads/",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "DVWA at Low security genuinely serves /hackable/uploads/ without authentication. Wordlist hits on these paths are not unexpected forced browsing vulnerabilities.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-18",
+      "name": "DVWA /external/phpids/0.6/lib/IDS/tmp/phpids_log.txt Accessible Without Auth (Forced Browsing by Design)",
+      "category": "broken_access_control",
+      "endpoint": "/external/phpids/0.6/lib/IDS/tmp/phpids_log.txt",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "DVWA at Low security genuinely serves /external/phpids/0.6/lib/IDS/tmp/phpids_log.txt without authentication. Wordlist hits on these paths are not unexpected forced browsing vulnerabilities.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-19",
+      "name": "DVWA /config Accessible Without Auth (Forced Browsing by Design)",
+      "category": "broken_access_control",
+      "endpoint": "/config",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "DVWA at Low security genuinely serves /config without authentication. Wordlist hits on these paths are not unexpected forced browsing vulnerabilities.",
+      "in_scope": false
+    },
+    {
+      "id": "DV-OOS-20",
+      "name": "DVWA /docs/ Accessible Without Auth (Forced Browsing by Design)",
+      "category": "broken_access_control",
+      "endpoint": "/docs/",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "DVWA at Low security genuinely serves /docs/ without authentication. Wordlist hits on these paths are not unexpected forced browsing vulnerabilities.",
+      "in_scope": false
     }
   ]
 }

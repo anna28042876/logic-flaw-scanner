@@ -4,6 +4,7 @@
 # Keeping them separate allows for debugging of the log file without the terminal getting spammed with DEBUG noise mid-scan.
 import logging
 import os
+import time
 from datetime import datetime
 
 from colorama import Fore, Style, init as colorama_init
@@ -60,6 +61,13 @@ def setup_logger(
         "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
     )
     console_handler.setFormatter(console_formatter)
+
+    # Force both handlers to log timestamps in UTC so that file and console timestamps
+    # match the banner and duration calculations (which use datetime.UTC). Without this,
+    # %(asctime)s renders in the VM's local time and looks 4 hours adrift from the UTC
+    # banner — arithmetically correct, but visually confusing during scan review.
+    file_handler.formatter.converter = time.gmtime
+    console_handler.formatter.converter = time.gmtime
 
     logger = logging.getLogger(name)
     logger.setLevel(level)

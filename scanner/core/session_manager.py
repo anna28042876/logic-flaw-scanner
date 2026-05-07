@@ -52,11 +52,14 @@ class SessionManager:
             }
 
         # Constructs full login URL safely.
-        login_url = (
-            self.config.target_url.rstrip("/")
-            + "/"
-            + login_cfg["login_url"].lstrip("/")
-        )
+        # Uses the login URL directly if it is already absolute, otherwise prepends the base target URL.
+        raw_login_url = login_cfg["login_url"]
+        if raw_login_url.startswith("http://") or raw_login_url.startswith("https://"):
+            login_url = raw_login_url
+        else:
+            login_url = (
+                self.config.target_url.rstrip("/") + "/" + raw_login_url.lstrip("/")
+            )
 
         # First reqests the login page to extract the `CSRF` tokens, if present.
         try:
@@ -74,17 +77,29 @@ class SessionManager:
             login_cfg["password_field"]: cred["password"],
         }
 
-        # Attempts to detect and include `CSRF` tokens automatically.
+        # Collects all named input fields from the login form, including submit buttons and hidden
+        # fields. This handles DVWA's `Login=Login` submit requirement (login.php only processes
+        # the POST when `isset($_POST['Login'])` is true) and any hidden CSRF token fields, without
+        # needing them to be explicitly configured. Credentials set above are not overwritten.
         if soup:
-            # Checks DVWA's `user_token` field, alongside common framework CSRF field names - before the form POST request.
-            for name in ("_csrf", "csrf_token", "csrfmiddlewaretoken", "user_token"):
-                field = soup.find("input", {"name": name})
-                if field and field.get("value"):
-                    payload[name] = field["value"]
-                    logger.debug(
-                        f"CSRF token found in field '{name}' for {cred['role']}"
-                    )
-                    break
+            login_form = soup.find("form")
+            if login_form:
+                for field in login_form.find_all("input"):
+                    name = field.get("name")
+                    if not name:
+                        continue
+                    # Credentials are already set and must not be overwritten by form defaults.
+                    if name in (login_cfg["username_field"], login_cfg["password_field"]):
+                        continue
+                    field_type = field.get("type", "text").lower()
+                    value = field.get("value", "")
+                    # Include submit buttons (always) and any field carrying a non-empty default
+                    # value (covers CSRF tokens, user_token, and similar hidden fields).
+                    if field_type == "submit" or value:
+                        payload[name] = value
+                        logger.debug(
+                            f"Form field '{name}' (type={field_type}) added to payload for {cred['role']}"
+                        )
 
             # Also supports frameworks that expose `CSRF` via the meta tags.
             meta_csrf = soup.find("meta", {"name": "csrf-token"})
@@ -92,7 +107,11 @@ class SessionManager:
                 payload["_csrf"] = meta_csrf["content"]
                 logger.debug(f"CSRF token found in meta tag for {cred['role']}")
 
-        # Submits the login request.
+        # Submits the login request with redirects followed so that DVWA's PHP session is fully
+        # established after the server processes the redirect chain to `/index.php`.
+        # Stopping at the 302 (allow_redirects=False) leaves `fresh_session` holding a pre-auth
+        # PHPSESSID that DVWA has already invalidated server-side, causing every subsequent
+        # crawler request to receive the login page regardless of credentials.
         try:
             response = fresh_session.post(
                 login_url,
@@ -105,16 +124,37 @@ class SessionManager:
             logger.error(f"Form login POST failed for role '{cred['role']}': {e}")
             return False
 
-        # Heuristic success determination if the status code matches as expected, and the response body does not contain common failure keywords.
         success_indicator = str(login_cfg.get("success_indicator", "200"))
+
+        # With allow_redirects=True, the final response status is the post-redirect page (e.g., 200
+        # for index.php). Check `response.history` for the expected intermediate status code instead.
+        got_expected_redirect = any(
+            str(r.status_code) == success_indicator for r in response.history
+        )
+
+        # Confirm the final URL is not a login or setup page, which would indicate auth failure.
+        # A 302 to /setup.php (DVWA not initialised) or a stay at /login.php (wrong credentials /
+        # bad CSRF token) are both caught here, regardless of the intermediate status code.
+        final_url_lower = response.url.lower()
+        ended_at_auth_page = any(
+            indicator in final_url_lower for indicator in ("login", "setup")
+        )
+
         body_lower = response.text.lower()
-        status_match = str(response.status_code) == success_indicator
         no_error = not any(
             kw in body_lower for kw in ("invalid", "incorrect", "failed", "error")
         )
 
-        if status_match or no_error:
-            # Stores the session data for later use.
+        # Primary success path: redirect chain contained the expected status and the final page is
+        # not a login or setup page. Fallback covers apps that return 200 directly on success (no
+        # redirect), where the body also contains no error keywords.
+        auth_succeeded = (got_expected_redirect and not ended_at_auth_page) or (
+            no_error and not ended_at_auth_page
+        )
+
+        if auth_succeeded:
+            # Stores the session data for later use. `fresh_session.cookies` is captured after the
+            # full redirect chain has completed, so the snapshot reflects the live authenticated state.
             self.sessions[cred["role"]] = {
                 "cookies": dict(fresh_session.cookies),
                 "session_obj": fresh_session,
@@ -157,7 +197,7 @@ class SessionManager:
             return True
 
         logger.warning(
-            f"Form auth failed for role '{cred['role']}' - status {response.status_code}"
+            f"Form auth failed for role '{cred['role']}' - final URL: {response.url}, status: {response.status_code}"
         )
         return False
 
@@ -329,7 +369,11 @@ class SessionManager:
         auth_type = session.get("auth_type")
 
         if auth_type == "form":
-            return {"cookies": session["cookies"], "session_key": role}
+            # Only `session_key` is returned so that `HTTPClient` routes requests through the live
+            # `fresh_session` object directly. Passing a `cookies=` snapshot alongside `session_key`
+            # would override the live cookie jar with a stale pre-redirect snapshot, causing DVWA to
+            # treat every crawler request as unauthenticated.
+            return {"session_key": role}
         elif auth_type in ("bearer", "basic", "api_key"):
             return {"headers": session["auth_header"], "session_key": role}
 

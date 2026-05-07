@@ -4,11 +4,11 @@
     "version": "v17.1.1",
     "base_url": "http://localhost:3000",
     "selection_criteria": "Covers all scanner the scanner module categories such as broken access control, broken authentication, missing rate limiting, and workflow manipulation. All 13 entries are known true-positive vulnerabilities, verified manually against OWASP Juice Shop v17.1.1.",
-    "total_entries": 13,
+    "total_entries": 17,
     "category_counts": {
-      "broken_access_control": 6,
+      "broken_access_control": 8,
       "broken_authentication": 3,
-      "security_misconfiguration": 2,
+      "security_misconfiguration": 4,
       "workflow_manipulation": 2
     }
   },
@@ -142,6 +142,146 @@
       "scanner_module": "workflow_bypass",
       "expected_behaviour": "Submitting the checkout confirmation request without completing the intermediate address, delivery, and payment steps must return 400,  or 403. Juice Shop does not enforce server-side workflow state, so the order is placed, regardless of which prior steps were completed.",
       "in_scope": true
+    },
+    {
+      "id": "JS-014",
+      "name": "Admin Application Configuration Accessible by Normal User",
+      "category": "broken_access_control",
+      "endpoint": "/rest/admin/application-configuration",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "A non-admin authenticated user requesting GET /rest/admin/application-configuration must receive 401 or 403. Only the admin role may read the full application configuration.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-015",
+      "name": "Admin saveLoginIp Endpoint Accessible by Normal User",
+      "category": "broken_access_control",
+      "endpoint": "/rest/saveLoginIp",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "GET /rest/saveLoginIp must return 401 or 403 for non-admin sessions. A normal authenticated user receiving 200 indicates missing server-side authorisation enforcement on an admin-only endpoint.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-016",
+      "name": "Authentication Details Endpoint Has No Rate Limiting",
+      "category": "security_misconfiguration",
+      "endpoint": "/rest/user/authentication-details/",
+      "method": "GET",
+      "scanner_module": "rate_limit_detector",
+      "expected_behaviour": "Repeated requests to /rest/user/authentication-details/ must be throttled after a reasonable threshold. Juice Shop applies no rate limiting to this endpoint.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-017",
+      "name": "Password Reset Rate Limiting Can Be Bypassed",
+      "category": "security_misconfiguration",
+      "endpoint": "/rest/user/reset-password",
+      "method": "POST",
+      "scanner_module": "rate_limit_bypass",
+      "expected_behaviour": "Rate limiting on /rest/user/reset-password must not be circumvented by header manipulation or URL variation techniques.",
+      "in_scope": true
+    },
+    {
+      "id": "JS-OOS-01",
+      "name": "Juice Shop /api/Products \u2014 Out of Scope for Forced Browsing / Unauth Evaluation",
+      "category": "broken_access_control",
+      "endpoint": "/api/Products",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "/api/Products is either publicly accessible by design (crawled without auth) or its unauth finding is superseded by a higher-severity finding at the same endpoint.",
+      "in_scope": false
+    },
+    {
+      "id": "JS-OOS-02",
+      "name": "Juice Shop /api/Feedbacks \u2014 Out of Scope for Forced Browsing / Unauth Evaluation",
+      "category": "broken_access_control",
+      "endpoint": "/api/Feedbacks",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "/api/Feedbacks is either publicly accessible by design (crawled without auth) or its unauth finding is superseded by a higher-severity finding at the same endpoint.",
+      "in_scope": false
+    },
+    {
+      "id": "JS-OOS-03",
+      "name": "Juice Shop /api/Challenges \u2014 Out of Scope for Forced Browsing / Unauth Evaluation",
+      "category": "broken_access_control",
+      "endpoint": "/api/Challenges",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "/api/Challenges is either publicly accessible by design (crawled without auth) or its unauth finding is superseded by a higher-severity finding at the same endpoint.",
+      "in_scope": false
+    },
+    {
+      "id": "JS-OOS-04",
+      "name": "Juice Shop /api/SecurityQuestions \u2014 Out of Scope for Forced Browsing / Unauth Evaluation",
+      "category": "broken_access_control",
+      "endpoint": "/api/SecurityQuestions",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "/api/SecurityQuestions is either publicly accessible by design (crawled without auth) or its unauth finding is superseded by a higher-severity finding at the same endpoint.",
+      "in_scope": false
+    },
+    {
+      "id": "JS-OOS-05",
+      "name": "Juice Shop /api/Quantitys \u2014 Out of Scope for Forced Browsing / Unauth Evaluation",
+      "category": "broken_access_control",
+      "endpoint": "/api/Quantitys",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "/api/Quantitys is either publicly accessible by design (crawled without auth) or its unauth finding is superseded by a higher-severity finding at the same endpoint.",
+      "in_scope": false
+    },
+    {
+      "id": "JS-OOS-06",
+      "name": "Juice Shop /rest/products/search \u2014 Out of Scope for Forced Browsing / Unauth Evaluation",
+      "category": "broken_access_control",
+      "endpoint": "/rest/products/search",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "/rest/products/search is either publicly accessible by design (crawled without auth) or its unauth finding is superseded by a higher-severity finding at the same endpoint.",
+      "in_scope": false
+    },
+    {
+      "id": "JS-OOS-07",
+      "name": "Juice Shop /rest/languages \u2014 Out of Scope for Forced Browsing / Unauth Evaluation",
+      "category": "broken_access_control",
+      "endpoint": "/rest/languages",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "/rest/languages is either publicly accessible by design (crawled without auth) or its unauth finding is superseded by a higher-severity finding at the same endpoint.",
+      "in_scope": false
+    },
+    {
+      "id": "JS-OOS-08",
+      "name": "Juice Shop /rest/memories \u2014 Out of Scope for Forced Browsing / Unauth Evaluation",
+      "category": "broken_access_control",
+      "endpoint": "/rest/memories",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "/rest/memories is either publicly accessible by design (crawled without auth) or its unauth finding is superseded by a higher-severity finding at the same endpoint.",
+      "in_scope": false
+    },
+    {
+      "id": "JS-OOS-09",
+      "name": "Juice Shop /rest/admin/application-configuration \u2014 Out of Scope for Forced Browsing / Unauth Evaluation",
+      "category": "broken_access_control",
+      "endpoint": "/rest/admin/application-configuration",
+      "method": "GET",
+      "scanner_module": "unauth_access",
+      "expected_behaviour": "/rest/admin/application-configuration is either publicly accessible by design (crawled without auth) or its unauth finding is superseded by a higher-severity finding at the same endpoint.",
+      "in_scope": false
+    },
+    {
+      "id": "JS-OOS-10",
+      "name": "Juice Shop /rest/admin/application-configuration \u2014 Out of Scope for Forced Browsing / Unauth Evaluation",
+      "category": "broken_access_control",
+      "endpoint": "/rest/admin/application-configuration",
+      "method": "GET",
+      "scanner_module": "vertical_auth",
+      "expected_behaviour": "/rest/admin/application-configuration is either publicly accessible by design (crawled without auth) or its unauth finding is superseded by a higher-severity finding at the same endpoint.",
+      "in_scope": false
     }
   ]
 }

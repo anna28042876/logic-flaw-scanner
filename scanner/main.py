@@ -57,8 +57,9 @@ class Scanner:
         self.config.validate()
 
         # Sets DEBUG Logging when verbose is requested, otherwise it restricts console output to INFO.
-        log_level = "DEBUG" if verbose else "INFO"
-        setup_logger(log_level)
+        # Called without arguments so the logger is registered under the "scanner" hierarchy that all
+        # sub-modules propagate to via `get_logger(__name__)`.
+        setup_logger()
 
         # Creates the shared `HTTPClient` with the loaded config file, so that all modules use the same session pool.
         self.http_client = HTTPClient(self.config)
@@ -156,16 +157,16 @@ class Scanner:
         modules_run = []
 
         ## Authentication
-        # Authenticates all configured roles before any module runs. Aborts if there are no sessions established.
+        # Authenticates all configured roles before any module runs. Aborts if no sessions are established.
         logger.info("Step: Authentication.")
         try:
             # Calls `authenticate_all()`, which dispatches to the correct auth handler per role, based on config auth type.
             auth_results = self.session_manager.authenticate_all()
             logger.info("Authentication results: %s", auth_results)
 
-            # Treats an empty results dictionary as a fatal error, because all the subsequent modules require at least one session.
-            if not auth_results:
-                logger.error("Authentication produced no sessions. Aborting scan.")
+            # Treats all-failed authentication as a fatal error, because all the subsequent modules require at least one valid session.
+            if not any(auth_results.values()):
+                logger.error("Authentication failed for all configured roles. Aborting scan.")
                 sys.exit(1)
         except Exception:
             # Treats any unhandled exception during authentication as fatal, because all the modules depend on it.

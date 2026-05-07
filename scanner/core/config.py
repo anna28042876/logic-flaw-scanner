@@ -83,6 +83,10 @@ class ScanConfig:
         defaults = {
             "requests_per_second": 10,  # Reduced from 50 to protect VM performance.
             "total_requests": 100,  # Reduced from 200 for the initial pass.
+            # Explicitly declared endpoints for `rate_limit_detector.py` to probe.
+            # An empty list causes the detector to fall back to its own hard-coded critical paths.
+            # Populated per-target in `juiceshop.yaml` and `dvwa.yaml`.
+            "critical_endpoints": [],
             # Headers are to rotate when testing rate limit bypass techniques.
             # Each of these can be used to spoof a different client IP address.
             "bypass_headers": [
@@ -110,6 +114,16 @@ class ScanConfig:
         Each workflow is a named sequence of HTTP steps, used by the
         `WorkflowRecorder` and `WorkflowBypassTester`."""
         return self._data.get("workflows", [])
+
+    ### `known_admin_endpoints`.
+    @property
+    def known_admin_endpoints(self):
+        """List of statically declared admin-only endpoints for `vertical_auth.py` to test
+        regardless of crawl differentiation. Each entry is a dict with `url` and `method` keys.
+        Populated per-target in `juiceshop.yaml` to cover endpoints all crawl roles discover
+        equally, such as `/api/Users` and `/api/Complaints`, which the `discovered_by_roles`
+        heuristic in `vertical_auth.py` would otherwise miss."""
+        return self._data.get("known_admin_endpoints", [])
 
     ### `excluded_paths`.
     @property
@@ -160,6 +174,13 @@ class ScanConfig:
         }
         defaults.update(self._data.get("scope", {}))
         return defaults
+
+    ### `random_seed`.
+    @property
+    def random_seed(self):
+        """Fixed integer seed for all random number generators in the scanner.
+        Ensures three consecutive scan runs produce byte-identical JSON reports."""
+        return self._data.get("random_seed", 42)
 
     ### `validate()`.
     def validate(self):

@@ -64,6 +64,9 @@ class RateLimitDetector:
         sleep_interval = 1 / rps
         # Collects the per-request result dictionaries, for post-loop analysis.
         results = []
+        # L2: Tracks anomalous (non-401/429) response count during login tests for a post-loop summary.
+        anomalous_count = 0
+
         logger.info(
             "Starting rate limit detection on %s: %d requests at %d req/s.",
             endpoint_url,
@@ -96,12 +99,9 @@ class RateLimitDetector:
             # Logs a warning when a response, other than 401 or 429, is returned on a login endpoint test.
             if body and body.get("email") == RATE_LIMIT_TEST_EMAIL:
                 if response.status_code not in (401, 429):
-                    logger.warning(
-                        "Anomalous status %s on login rate limit test at request %d for %s.",
-                        response.status_code,
-                        request_number,
-                        endpoint_url,
-                    )
+                    # L2: Counts anomalous responses silently during the loop rather than emitting
+                    # one WARNING per request, which would flood the log with 100 identical lines.
+                    anomalous_count += 1
 
             # Records the full result for the request, including all the rate limit response headers.
             results.append(
@@ -117,6 +117,14 @@ class RateLimitDetector:
             )
 
             time.sleep(sleep_interval)
+
+        # Emits a single summary log for any anomalous login responses, avoiding per-request noise.
+        if anomalous_count > 0:
+            logger.info(
+                "%d anomalous (non-401/429) response(s) recorded during login rate limit test on %s.",
+                anomalous_count,
+                endpoint_url,
+            )
 
         # Analyses the collected results, to determine whether rate-limiting was enforced.
         count_429 = sum(1 for r in results if r["status_code"] == 429)
