@@ -1,0 +1,6 @@
+tool,target,TP,FN,FP,recall,precision,f1,time_to_detection_seconds,duration_seconds
+Scanner,Juice Shop,10,7,0,0.5882,1.0,0.7407,491.6,4916
+Scanner,DVWA,4,1,0,0.8,1.0,0.8889,721.75,2887
+Scanner,Combined,14,8,0,0.6364,1.0,0.7778,557.36,7803
+ZAP,Juice Shop,0,17,0,0.0,0.0,0.0,N/A,2940
+Burp Community,Juice Shop,0,17,0,0.0,0.0,0.0,N/A,180
