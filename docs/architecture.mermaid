@@ -1,0 +1,52 @@
+flowchart TD
+    subgraph CLI["CLI Layer"]
+        A["main.py — argparse"]
+    end
+
+    subgraph ORCH["Orchestrator"]
+        B["Scanner class"]
+    end
+
+    subgraph CORE["Core Layer"]
+        C1["config.py"]
+        C2["http_client.py"]
+        C3["session_manager.py"]
+        C4["scope.py"]
+        C5["comparator.py"]
+        C6["evidence.py"]
+    end
+
+    subgraph MOD["Module Layer"]
+        M1["crawler.py"]
+        M2["spa_crawler.py"]
+        M3["param_enumerator.py"]
+        M4["unauth_access.py"]
+        M5["session_termination.py"]
+        M6["session_fixation.py"]
+        M7["horizontal_auth.py"]
+        M8["vertical_auth.py"]
+        M9["workflow_recorder.py"]
+        M10["workflow_bypass.py"]
+        M11["rate_limit_detector.py"]
+        M12["rate_limit_bypass.py"]
+    end
+
+    subgraph REP["Report Layer"]
+        R1["html_report.py"]
+        R2["json_report.py"]
+    end
+
+    CLI -->|"config path, flags"| ORCH
+    ORCH -->|"loads and validates"| C1
+    ORCH -->|"constructs shared instances"| C2
+    ORCH -->|"constructs shared instances"| C3
+    ORCH -->|"constructs shared instances"| C4
+    ORCH -->|"constructs shared instances"| C5
+    ORCH -->|"constructs shared instances"| C6
+    C1 --> MOD
+    C2 --> MOD
+    C3 --> MOD
+    C4 --> MOD
+    C5 --> MOD
+    C6 --> MOD
+    MOD -->|"ScanResult findings"| REP

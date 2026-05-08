@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant CLI as CLI
+    participant Scanner as Scanner
+    participant Core as Core Layer
+    participant Mod as Module Layer
+    participant Rep as Report Layer
+
+    CLI->>Scanner: Scanner(config_path, output_dir, modules)
+    Scanner->>Core: ScanConfig.load() and validate()
+    Scanner->>Core: SessionManager.authenticate_all()
+    Scanner->>Mod: Crawler.run()
+    Scanner->>Mod: SPACrawler.run()
+    Scanner->>Mod: ParameterEnumerator.run()
+    Scanner->>Mod: UnauthAccessChecker.run()
+    Scanner->>Mod: SessionTerminationValidator.run()
+    Scanner->>Mod: SessionFixationTester.run()
+    Scanner->>Mod: HorizontalAuthTester.run()
+    Scanner->>Mod: VerticalAuthTester.run()
+    Scanner->>Mod: WorkflowRecorder.run()
+    Scanner->>Mod: WorkflowBypassTester.run()
+    Scanner->>Mod: RateLimitDetector.run()
+    Scanner->>Mod: RateLimitBypassTester.run()
+    Scanner->>Rep: HTMLReportGenerator.generate()
+    Scanner->>Rep: JSONReportGenerator.generate()
+    Rep-->>CLI: reports/ directory
