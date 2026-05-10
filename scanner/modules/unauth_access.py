@@ -30,9 +30,8 @@ class UnauthAccessChecker:
         session_manager: SessionManager,
         comparator: ResponseComparator,
     ):
-        """Stores all injected dependencies and initialises `self.findings` as an empty list
-        for recording `Vulnerability` objects found during unauthenticated access, and
-        forced browsing tests. Creates a `ScopeEnforcer` from `config` for scope validation."""
+        """Stores all injected dependencies and initialises `self.findings` as an empty list for recording `Vulnerability` objects found during
+        unauthenticated access, and forced browsing tests. Creates a `ScopeEnforcer` from `config` for scope validation."""
         self.config = config
         self.http_client = http_client
         self.session_manager = session_manager
@@ -44,9 +43,12 @@ class UnauthAccessChecker:
         self._public_url_norms = set()
 
     def test_endpoint(self, endpoint):
-        """Sends both authenticated, and unauthenticated, requests to the same endpoint, then compares
-        responses. Flags an authentication bypass if `ResponseComparator` detects matching content
-        length. or sensitive field exposure in the unauthenticated response."""
+        """Sends both authenticated, and unauthenticated, requests to the same endpoint, then compares responses. Flags an authentication bypass if
+        `ResponseComparator` detects matching content length. or sensitive field exposure in the unauthenticated response.
+
+        Args:
+            endpoint (Endpoint): THe endpoint to test, as discovered by the cralers. Endpoits with `requires_auth=False`, or outside the configured scope are
+            skipped automatically."""
 
         # Skips endpoints outside of the configured scan scope to avoid unintended requests.
         if not self.scope.is_in_scope(endpoint.url):
@@ -55,10 +57,7 @@ class UnauthAccessChecker:
             )
             return
 
-        # Issue 4: Skips endpoints discovered during the unauthenticated crawl pass — the
-        # crawler sets `requires_auth=False` on these because they are public by design
-        # (e.g. /api/Products, /api/Feedbacks, /#/score-board on Juice Shop). Testing them
-        # for authentication bypass guarantees a false positive on every one.
+        #  Skips publicly accessible endpoints, discovered during unauthenticated crawling to avoid guaranteed false positives, during authenticated bypass testing.
         if hasattr(endpoint, "requires_auth") and not endpoint.requires_auth:
             logger.debug(
                 f"{endpoint.url} does not require authentication "
@@ -66,8 +65,7 @@ class UnauthAccessChecker:
             )
             return
 
-        # B3: Skips the configured login URL — it is a public endpoint by definition
-        # and must be reachable without authentication.
+        # Skips the configured login RUL, it is a public endpoints by definition, and must be reachable without autentication.
         _login_url = self.config.login_config.get("login_url", "")
         if _login_url and endpoint.url.rstrip("/") == _login_url.rstrip("/"):
             logger.debug(
@@ -75,8 +73,7 @@ class UnauthAccessChecker:
             )
             return
 
-        # B1: Determines the authenticated session key, falling back to the first
-        # available role when user_a is not configured on the target.
+        # Determine the authenticated session key, falling back to the first available role, when `user_a` is configured on the target.
         auth_role = (
             "user_a"
             if "user_a" in self.session_manager.sessions
@@ -132,14 +129,14 @@ class UnauthAccessChecker:
             )
             return
 
-        # Skips  this endpoint if the unauthenticated request produced no usable response.
+        # Skips this endpoint if the unauthenticated request produced no usable response.
         if response_unauth is None:
             logger.debug(
                 f"Unauthenticated response for {endpoint.url} was None, skipping."
             )
             return
 
-        # Skips  this endpoint if `is_access_granted` indicates the server correctly denied the unauthenticated request.
+        # Skips this endpoint if `is_access_granted` indicates the server correctly denied the unauthenticated request.
         if not self.comparator.is_access_granted(response_unauth):
             logger.debug(
                 f"{endpoint.url} correctly denied unauthenticated access with status {response_unauth.status_code}."
@@ -186,9 +183,12 @@ class UnauthAccessChecker:
             )
 
     def test_forced_browsing(self, custom_paths=None):
-        """Loads all paths from `wordlists/common_paths.txt`, and sends unauthenticated GET requests
-        to each. Flags any path returning status 200 with over 500 bytes that does not redirect
-        to a Juice Shop or DVWA login page as a forced browsing vulnerability."""
+        """Loads all paths from `wordlists/common_paths.txt`, and sends unauthenticated GET requests to each. Flags any path returning status 200
+        with over 500 bytes that does not redirect to a Juice Shop or DVWA login page as a forced browsing vulnerability.
+
+        Args::
+            custom_paths (list[str], optional): Additional paths to probe beyond those in the wordlist e.g., paths observed during manual testing,
+            defaults to `None` meaning only the wordlist is used."""
 
         # Resolves the absolute path to `wordlists/common_paths.txt` relative to the module's location.
         wordlist_path = os.path.normpath(
@@ -256,11 +256,14 @@ class UnauthAccessChecker:
                 )
                 continue
 
-            # Issue 2: Skips paths that were already discovered during the unauthenticated crawl
-            # pass and therefore have requires_auth=False. Those endpoints are publicly reachable
-            # by design and wordlist hits against them are not forced browsing vulnerabilities.
-            url_path = url.replace(self.config.target_url.rstrip("/"), "").rstrip("/").lower()
-            if url_path in self._public_url_norms or (url_path + "/") in self._public_url_norms:
+            # Skips endpoints already discovered during unauthenticated crawling, because publicly accessible paths are not valid forced browsing vulnerabilities.
+            url_path = (
+                url.replace(self.config.target_url.rstrip("/"), "").rstrip("/").lower()
+            )
+            if (
+                url_path in self._public_url_norms
+                or (url_path + "/") in self._public_url_norms
+            ):
                 logger.debug(
                     f"{url} matches a known public crawled endpoint, skipping forced browsing flag."
                 )
@@ -287,15 +290,17 @@ class UnauthAccessChecker:
             )
 
     def test_all(self, endpoints):
-        """Calls `test_endpoint` on each item in the provided list, covering all endpoints that were
-        discovered by `crawler.py` and `spa_crawler.py` for unauthenticated access vulnerabilities."""
+        """Calls `test_endpoint` on each item in the provided list, covering all endpoints that were discovered by `crawler.py`,
+        and `spa_crawler.py` for unauthenticated access vulnerabilities.
+
+        Args:
+            endpoints (list[Endpoint]): All discovereed endpoints, from the crawl phase."""
 
         logger.info(
             f"Running unauthenticated access checks across {len(endpoints)} endpoints."
         )
 
-        # Populates the public URL set from endpoints that do not require authentication, so that
-        # test_forced_browsing can skip wordlist hits against already known public resources.
+        # Stores publicly accessible URLs, so that forced browsing tsts can ignore resources already known to be accessible without authentication.
         base = self.config.target_url.rstrip("/")
         for endpoint in endpoints:
             if hasattr(endpoint, "requires_auth") and not endpoint.requires_auth:
@@ -307,5 +312,8 @@ class UnauthAccessChecker:
             self.test_endpoint(endpoint)
 
     def get_findings(self):
-        """Returns the complete list of `Vulnerability` objects recorded during unauthenticated access testing."""
+        """Returns the complete list of `Vulnerability` objects recorded during unauthenticated access testing.
+
+        Returns:
+            list[VUlnerability]: All `HIgh` (authentication bypas), and `Medium` (forced browsing) findings accumulated during this module's test run."""
         return self.findings

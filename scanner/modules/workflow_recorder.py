@@ -31,7 +31,15 @@ class WorkflowRecorder:
 
     def _substitute_tokens(self, template_str, token_store):
         """Finds all `{{key}}` placeholders in `template_str`, and replaces the matching value from `token_store`. Then logs
-        a warning for any placehooder whose key is absent, returning the substituted string."""
+        a warning for any placehooder whose key is absent, returning the substituted string.
+
+        Args:
+            template_str (str): A string potentially containing `{{key}}` placeholders, e.g., a URL path, or JSON body.
+
+            token_store (dict): A mapping of placeholder keys, to substitution values accumulated across prior worklow steps.
+
+        Rerturns:
+            str: The input string with all matching placeholders replaced. UNresolved placeholders are left as-is, and a warning is logged."""
 
         # Iterates through all placeholder matches in the template string, replacing each with its stored token value.
         for match in re.finditer(r"\{\{([^}]+)\}\}", template_str):
@@ -51,7 +59,16 @@ class WorkflowRecorder:
     def _extract_tokens(self, response, extract_config):
         """Iterates `extract_config` entries, with each specifying a `name`, `source` (json, or regex), and `path`.
         Extracts the values from `response`, using dot notation for JSON, or a capture group for regex, returning
-        a dictionary of extracted name-value pairs."""
+        a dictionary of extracted name-value pairs.
+
+        Args:
+            response (requests.Response): The HTTP response, from which to extract values.
+
+            extract_config (list[dict]): A list of extraction rule dicts, each containing `name` (str), `source (`json`, or `regex`), and `path` (dot-noation JSON
+            path, or regex pattern string.)
+
+        Returns:
+            dict: A mapping `{name: extracted_value}` for every rule that matched. RUles that fail to match log a warning, and are ommited from the result."""
 
         # Accumuilates extracted name-value pairs, to return to the valler.
         extracted = {}
@@ -94,7 +111,13 @@ class WorkflowRecorder:
     def _build_identity_tokens(self, role):
         """Extracts identity values from the session for `role`, decoding the JWT
         payload when the auth type is bearer. Returns a dictionary of token names
-        to values, seeding `user_id` and `user_email` for placeholder substitution."""
+        to values, seeding `user_id` and `user_email` for placeholder substitution.
+
+        Args:
+            role (str): The role name whose session is inspected.
+        Returns:
+            dict: A mapping of the initial token names to valkues, seeding at least `user_id`, and optionally `user_email` for `{{user_id}}` placeholder
+            substitution in workflow steps. Returns an empty dict if the session isnt bearer-based, or JWT decoding fails."""
 
         tokens = {}
         session_data = self.session_manager.sessions.get(role, {})
@@ -103,6 +126,7 @@ class WorkflowRecorder:
         if session_data.get("auth_type") == "bearer" and "token" in session_data:
             try:
                 import base64
+
                 jwt_token = session_data["token"]
                 # Splits the JWT into its three dot-separated segments.
                 parts = jwt_token.split(".")
@@ -130,7 +154,17 @@ class WorkflowRecorder:
     def record_workflow(self, workflow_name, steps, role="user_a", initial_tokens=None):
         """Replays `steps` sequentially under `role`, substituting `{{key}}` placeholders before each request,
         extracting CSRF tokens for form steps, and storing each request and response. Then saves the completed
-        recording to `self.recorded_workflows` under `workflow_name`."""
+        recording to `self.recorded_workflows` under `workflow_name`.
+
+        Args:
+            workflow_name (str): The name used to store, and retrieve this recording in `self.recorded_workflows`.
+
+            steps (list[dict]): ORdered list of step dicts, each containing at minimum `url` or `path`, `method`, and optionally `body`,
+            `content_type`, `extract`, and `_is_pre_step`.
+
+            role (str): The role whose sssion credentials are used for all requests, defaults to `user_a`.
+
+            initial_tokens (dict, optional): Pre-seeded token values, typically from `_build_identity_tokens`, defaults to an empty dict."""
 
         # Retrieves the session credentials and headers for the specified role.
         session_kwargs = self.session_manager.get_session_kwargs(role)
@@ -152,12 +186,7 @@ class WorkflowRecorder:
             if body and isinstance(body, dict):
                 body_str = self._substitute_tokens(json.dumps(body), token_store)
                 body = json.loads(body_str)
-            # Substitutes token placeholders inside a raw string body, then parses the
-            # substituted text back to a dict. The juiceshop.yaml workflow specifies the
-            # body as a JSON-encoded string for placeholder readability; without this
-            # parse step, `http_client.post(json_body=body)` would JSON-encode the string
-            # itself, sending '"{...}"' to the server instead of an object — Juice Shop
-            # then returns an error, and the `data.id` extraction raises a KeyError.
+            # Rpleaces worklof wplaceholders inside raw JSON strings, and parses the result back into a dictionary, so requests send valid JSON objects, rather than encoded string literals.
             elif body and isinstance(body, str):
                 body = self._substitute_tokens(body, token_store)
                 try:
@@ -208,11 +237,11 @@ class WorkflowRecorder:
                 if step.get("_is_pre_step"):
                     for key, value in extracted.items():
                         token_store[f"pre.{key}"] = value
-                    # Fallback for Juice Shop: basket ID equals user ID. If `pre.user_basket_id` was not
-                    # extracted from the whoami response (e.g., the endpoint returned an empty user object
-                    # due to a session delivery issue), seed it from the JWT-decoded `user_id` that
-                    # `_build_identity_tokens` placed in the token store before recording began.
-                    if "pre.user_basket_id" not in token_store and "user_id" in token_store:
+                    # Falls back to the JWT derived user ID, when the basket ID was not extractd suxxessfully from the `whoami` response.
+                    if (
+                        "pre.user_basket_id" not in token_store
+                        and "user_id" in token_store
+                    ):
                         token_store["pre.user_basket_id"] = token_store["user_id"]
                         logger.debug(
                             "Seeded `pre.user_basket_id` from JWT-decoded `user_id` (%s) "

@@ -1,6 +1,5 @@
 """
 `param_enumerator.py`
- Phase 3.3
 
 Extracts and enumerates parameters found from discovered endpoints across any URL queuery strings,
 HTML form fields, and JSON response bodies. Fuzzes for hidden parameters against OWASP Juice Shop
@@ -45,7 +44,7 @@ STATIC_ASSET_EXTENSIONS = (
     ".map",
 )
 
-# CSRF field name patterns that are used to identify, and log token fields during form extraction.
+# CSRF field name patterns that are used to identify, and log token fields duriung form extraction.
 CSRF_FIELD_PATTERNS = re.compile(
     r"csrf|_csrf|csrf_token|csrfmiddlewaretoken|_token|xsrf", re.IGNORECASE
 )
@@ -53,7 +52,7 @@ CSRF_FIELD_PATTERNS = re.compile(
 # Patterns that identify ID-like, parameter names as IDOR and BOLA candidates.
 ID_FIELD_PATTERNS = re.compile(r"id|Id|ID|uuid|guid|ref|num")
 
-# Backup wordlist of 50 common parameter names used if `wordlists/common_params.txt` is absent
+# Backup wordlist of 50 ccommon parameter names used if `wordlists/common_params.txt` is absent
 FALLBACK_WORDLIST = [
     "id",
     "user_id",
@@ -108,9 +107,7 @@ FALLBACK_WORDLIST = [
     "coupon_id",
 ]
 
-# Number of consecutive 429 responses that triggers an early abort of fuzzing for an endpoint.
-# Juice Shop's reset-password endpoint rate-limits immediately and returns 429 for every probe,
-# causing the enumerator to misclassify every wordlist entry as a discovered parameter.
+# Number of consecutive 429 responses required before fuzzing is stopped early to prevent rate limited ndpoints, from producing false parameter discoveries.
 RATE_LIMIT_ABORT_THRESHOLD = 5
 
 
@@ -118,10 +115,8 @@ class ParameterEnumerator:
     """Extracts, enumerates, and fuzzes parameters from discovered endpoints."""
 
     def __init__(self, config, http_client, session_manager):
-        """Stores `config`, `http_client`, and `session_manager` to be used across all
-        extraction and fuzzing methods. Initialises `self.endpoint_params` as an
-        empty dictionary keyed by endpoint URL, ready to be populated by
-        `enumerate_all`."""
+        """Stores `config`, `http_client`, and `session_manager` to be used across all extraction and fuzzing methods. Initialises `self.endpoint_params` as an
+        empty dictionary keyed by endpoint URL, ready to be populated by `enumerate_all`."""
 
         self.config = config
         self.http_client = http_client
@@ -129,8 +124,7 @@ class ParameterEnumerator:
         self.endpoint_params = {}
 
     def _extract_url_params(self, url):
-        """Parses the query string of `url` using `parse_qs`, and returns a list of
-        `Parameter` objects with `location='url'`. Each query key becomes one
+        """Parses the query string of `url` using `parse_qs`, and returns a list of `Parameter` objects with `location='url'`. Each query key becomes one
         `Parameter`, with its first value stored as `sample_value`."""
 
         params = []
@@ -148,10 +142,8 @@ class ParameterEnumerator:
         return params
 
     def _extract_form_params(self, html, endpoint_url):
-        """Parses `html` with BeautifulSoup, and extracts all named 'input', 'select', and
-        'textarea' fields from every form. Then returns a list of `Parameter` objects with
-        `location='body'`. CSRF token fields are noted in a debug log and still
-        included."""
+        """Parses `html` with BeautifulSoup, and extracts all named 'input', 'select', and 'textarea' fields from every form. Then returns a list of `Parameter` objects with
+        `location='body'`. CSRF token fields are noted in a debug log and still included."""
 
         params = []
         soup = BeautifulSoup(html, "html.parser")
@@ -180,8 +172,7 @@ class ParameterEnumerator:
         return params
 
     def _extract_json_params(self, json_body, _depth=0):
-        """Recursively walks `json_body` (the parsed JSON dictionary/list) up to a
-        depth of 10. Returns all keys as `Parameter` objects with `location='body'`, and
+        """Recursively walks `json_body` (the parsed JSON dictionary/list) up to a depth of 10. Returns all keys as `Parameter` objects with `location='body'`, and
         keys whose values are the integers that receive `param_type='integer'`."""
 
         params = []
@@ -214,17 +205,13 @@ class ParameterEnumerator:
         return params
 
     def _load_param_wordlist(self):
-        """Loads the parameter names from `wordlists/common_params.txt`, with one name per line.
-        Revertsto the `FALLBACK_WORDLIST` if the file is absent, logging a warning
+        """Loads the parameter names from `wordlists/common_params.txt`, with one name per line. Revertsto the `FALLBACK_WORDLIST` if the file is absent, logging a warning
         so the missing file is visible in the scan output."""
 
         # Attempts to read the wordlist file and falls back to the hardcoded list if it is absent.
         try:
             with open(WORDLIST_PATH, "r") as f:
-                # Filter blank lines AND comment lines — wordlist headers like
-                # "## Vulnerability Scanner Parameter Wordlist" and "# IDOR ..." would
-                # otherwise be fuzzed as parameter names, producing the 886-parameter
-                # explosion seen on rest/image-captcha/ and similar endpoints.
+                # Filter blank lines, and comment lines, from the wwordlist, to prevent headers and descriptions from being incorectly fuzzed as parameter naems.
                 names = [
                     line.strip()
                     for line in f
@@ -240,16 +227,13 @@ class ParameterEnumerator:
             return FALLBACK_WORDLIST
 
     def fuzz_hidden_params(self, endpoint, session_kwargs=None):
-        """Sends a baseline request to `endpoint`, and then probes each wordlist parameter
-        name for a detectable response difference in the status code, body length, or
-        response time. Only fuzzes JSON endpoints, endpoints with fewer than 3 known parameters,
-        or endpoints whose URL matches a sensitive path such as '/admin', '/user', `/account`, or `/api`.
+        """Sends a baseline request to `endpoint`, and then probes each wordlist parameter name for a detectable response difference in the status code, body length, or
+        response time. Only fuzzes JSON endpoints, endpoints with fewer than 3 known parameters, or endpoints whose URL matches a sensitive path such as '/admin',
+        '/user', `/account`, or `/api`.
 
-        Aborts early if the endpoint returns RATE_LIMIT_ABORT_THRESHOLD or more consecutive 429
-        responses, which indicates the target is rate-limiting the probe stream. Treating every
-        429 as a discovery would produce thousands of spurious findings (e.g. Juice Shop's
-        /rest/user/reset-password), so the function returns only the parameters discovered before
-        the rate limit was hit."""
+        Aborts early if the endpoint returns RATE_LIMIT_ABORT_THRESHOLD or more consecutive 429 responses, which indicates the target is rate-limiting the probe stream.
+        Treating every 429 as a discovery would produce thousands of spurious findings (e.g. Juice Shop's /rest/user/reset-password), so the function returns only the
+        parameters discovered before the rate limit was hit."""
 
         url = endpoint.url
         method = endpoint.method.upper()
@@ -284,7 +268,9 @@ class ParameterEnumerator:
             if method == "GET":
                 baseline, _ = self.http_client.get(url, **(session_kwargs or {}))
             else:
-                baseline, _ = self.http_client.post(url, json_body={}, **(session_kwargs or {}))
+                baseline, _ = self.http_client.post(
+                    url, json_body={}, **(session_kwargs or {})
+                )
             baseline_time = time.time() - start
         except Exception as exc:
             logger.warning(f"Baseline request failed for {url}: {exc}")
@@ -294,9 +280,7 @@ class ParameterEnumerator:
         if baseline is None:
             return []
 
-        # If the baseline itself is a 429, the endpoint is already rate-limited before fuzzing begins.
-        # Continuing would cause every probe to register as a change from the non-429 expected baseline,
-        # producing a false discovery for every wordlist entry.
+        # Stops fguzzing immediately, if the baseline response is already rate limited to prevent every test being incorrectly marked as a discovery parameter.
         if baseline.status_code == 429:
             logger.info(
                 f"Baseline returned 429 for {url} — endpoint is already rate-limited, skipping fuzzing."
@@ -316,7 +300,9 @@ class ParameterEnumerator:
                 if method == "GET" or not is_json_endpoint:
                     separator = "&" if "?" in url else "?"
                     probe_url = f"{url}{separator}{param_name}=1"
-                    response, _ = self.http_client.get(probe_url, **(session_kwargs or {}))
+                    response, _ = self.http_client.get(
+                        probe_url, **(session_kwargs or {})
+                    )
                 else:
                     response, _ = self.http_client.post(
                         url, json_body={param_name: "1"}, **(session_kwargs or {})
@@ -330,9 +316,7 @@ class ParameterEnumerator:
             if response is None:
                 continue
 
-            # Tracks consecutive 429 responses to detect rate-limiting mid-fuzz. Once the threshold
-            # is reached, all further probes would return 429 regardless of the parameter name, making
-            # any subsequent status or length delta meaningless as a discovery signal.
+            # Tracks consecutive 429 responses, so that fuzzing can stop once rate limiting makes further parameter discovery results unreliable.
             if response.status_code == 429:
                 consecutive_429s += 1
                 if consecutive_429s >= RATE_LIMIT_ABORT_THRESHOLD:
@@ -374,8 +358,7 @@ class ParameterEnumerator:
         return discovered
 
     def _flag_id_parameters(self, params_list):
-        """Iterates `params_list`, and sets `is_id_field=True` on any `Parameter`
-        whose name matches the ID-like patterns in `ID_FIELD_PATTERNS`, or whose
+        """Iterates `params_list`, and sets `is_id_field=True` on any `Parameter` whose name matches the ID-like patterns in `ID_FIELD_PATTERNS`, or whose
         `sample_value` is purely numeric. Then returns the modified list."""
 
         # Iterates each parameter, and flags those with ID-like names or numeric sample values.
@@ -391,14 +374,14 @@ class ParameterEnumerator:
         return params_list
 
     def enumerate_all(self, endpoints):
-        """Iterates through `endpoints`, fetching each one to extract the URL, form, and JSON
-        parameters, and then fuzzes for hidden parameters, flagging ID fields. Stores
-        the combined `Parameter` list in `self.endpoint_params`, keyed by endpoint URL."""
+        """Iterates through `endpoints`, fetching each one to extract the URL, form, and JSON parameters, and then fuzzes for hidden parameters, flagging ID fields.
+        Stores the combined `Parameter` list in `self.endpoint_params`, keyed by endpoint URL.
 
-        # L3: Tracks already-processed URLs to prevent duplicate enumeration when the same URL
-        # appears with different HTTP methods in the endpoint list, which would produce paired
-        # log entries such as "Enumerated 5 parameters" then "Enumerated 4 parameters" for the
-        # same URL.
+        Args:
+            endpoints (list[Ednpoint]): THe full list of discoverred endpoints, produced by the crawler. Already enumerated URLs are skipped to prevent duplicate
+            work, when the same URL appears with different HTTP methods."""
+
+        # Tracks processed URLs, to prevent duplicate parameter enumeration, when the same endpoint appears multiple times with different HTTP methods.
         seen_urls = set()
 
         # Iterates each endpoint, extracting and fuzzing the parameters, then storing the results.
@@ -455,15 +438,21 @@ class ParameterEnumerator:
             logger.info(f"Enumerated {len(all_params)} parameters for {url}")
 
     def get_params(self):
-        """Returns `self.endpoint_params` which is the dictionary of all extracted, and fuzzed
-        parameters keyed by endpoint URL. Called after `enumerate_all` completes."""
+        """Returns `self.endpoint_params` which is the dictionary of all extracted, and fuzzed parameters keyed by endpoint URL. 
+        Called after `enumerate_all` completes.\
+        
+        Returns:
+            dict: A mapping of `{endpoint_url: list[Parameter]}`, containing all extracted, fuzzed, and ID-flagged parameters, for every enumerated URL."""
 
         return self.endpoint_params
 
     def get_id_endpoints(self):
-        """Filters `self.endpoint_params`, and returns only the URLs whose parameter
-        list contains at least one entry with `is_id_field=True`. Used by downstream
-        IDOR and BOLA testing modules to identify high-value endpoints."""
+        """Filters `self.endpoint_params`, and returns only the URLs whose parameter list contains at least one entry with `is_id_field=True`.
+        Used by downstream IDOR and BOLA testing modules to identify high-value endpoints.
+
+        Returns:
+            dict: A subset of `self.ednpoint_params` containing only the endpoint URLs, whose parameter list includes at least 1 ID-type parameter, used by
+            `HorizontalAuthTester`, to identify IDOR candidates."""
 
         id_endpoints = {}
         # Filters endpoint URLs to only those containing at least one ID-like parameter.

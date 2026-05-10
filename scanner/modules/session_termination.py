@@ -44,7 +44,14 @@ class SessionTerminationValidator:
     def _find_protected_endpoint(self, role):
         """Sends unauthenticated `GET` requests to the base URL, and common profile paths to find an endpoint
         returning 200 for the given role. This returns the first URL that responds with 200, or None if none of
-        the paths succeed."""
+        the paths succeed.
+
+        Args:
+            role (Str): The roole name whose session  credentials are used for the test request, e.g., `user_a`.
+
+        Returns:
+            str or None: The first URL that returns HTTP 200, for the authenticated role, or `None` if none of the candidate paths
+            respond successfully."""
 
         candidates = [
             self.config.target_url.rstrip("/"),
@@ -75,7 +82,11 @@ class SessionTerminationValidator:
 
     def _find_logout_endpoint(self):
         """Sends unauthenticated `GET` requests to common logout paths,  to identify any server-side logout endpoints. Returns the
-        first path that produces a non-404 response, or None if there are no server-side logout endpoints existing on the target."""
+        first path that produces a non-404 response, or None if there are no server-side logout endpoints existing on the target.
+
+        Returns:
+            str or None: The first logout URL that produces a non-404 response, or `None` if no server-side logout endpoint is found (as is the case for JS,
+            which uses client-side JWT deletion only.)"""
 
         logout_candidates = [
             "/logout",
@@ -108,7 +119,13 @@ class SessionTerminationValidator:
 
     def _decode_jwt_payload(self, token):
         """Decodes the base64-encoded payload segment of a JWT without any signature verification. Then returns
-        the payload as a dictionary, or an empty dictionary if decoding fails."""
+        the payload as a dictionary, or an empty dictionary if decoding fails.
+
+        Args:
+            toekn (str): THe raw JWT string, in 3-segment dot-seperated format.
+
+        Returns:
+            dict: The deocded payload as a Python dict, or an empty dict if the toekn is malformedd, or if base64 decoding fails."""
 
         try:
             segments = token.split(".")
@@ -131,7 +148,12 @@ class SessionTerminationValidator:
 
     def _run_jwt_fallback(self, role, session_kwargs):
         """Returns the JWT-specific fallback tst when no server-side logout endpoints exist. Decodes the exp claim, waits for the expiry
-        if within 300 seconds, then retests the token. Flags Expired JWT Accepted or JWT Without Expiry findings accordingly."""
+        if within 300 seconds, then retests the token. Flags Expired JWT Accepted or JWT Without Expiry findings accordingly.
+
+        Args:
+            role )Str_: The role name being tested, used for logging, and evidence.
+
+            session_kwargs (dict): THe pre-logout session credentials, including the `Authorisation: Bearer...` header, containing the JWT to test."""
 
         # Extracts the raw JWT string from the Authorisation header stored in `session_kwargs`.
         auth_header = session_kwargs.get("headers", {}).get("Authorization", "")
@@ -241,7 +263,10 @@ class SessionTerminationValidator:
     def test_logout_invalidation(self, role="user_a"):
         """Tests whether a session token, for the given role, remains usable after a logout. Deep-copies any pre-logout
         credentials, sends the logout request, then replays the old credentials. Falls back to JWT-specific testing on
-        Juice SHop."""
+        Juice SHop.
+
+        Args:
+            role (str): The role name to test, defaults to `user_a`. Should be a non-admin role, with authenticated session in `SessionManager`."""
 
         protected_url = self._find_protected_endpoint(role)
         # ABorts the test early if no protected endpoints can be confirmed for the intended role.
@@ -382,10 +407,11 @@ class SessionTerminationValidator:
             if cred.get("role") != "admin"
         ]
 
-        # G2: Guards against running with zero applicable roles before the log line, avoiding
-        # the misleading "Running session termination tests for 0 non-admin roles: []" entry.
+        # Prevents session termination test from running, when no applicable non admin roles are available.
         if not roles:
-            logger.debug("No non-admin roles configured — skipping session termination tests.")
+            logger.debug(
+                "No non-admin roles configured — skipping session termination tests."
+            )
             return
 
         logger.info(
@@ -397,5 +423,9 @@ class SessionTerminationValidator:
             self.test_logout_invalidation(role=role)
 
     def get_findings(self):
-        """Returns the completed list of `Vulnerability` objects, recorded during session termination testing."""
+        """Returns the completed list of `Vulnerability` objects, recorded during session termination testing.
+
+        Returns:
+            list[Vulnerability]: All `Medium` findings (`Session Not Invalidated on Logout`, `Expired JWT Accepted`, `JWT Without Expiry`),
+            accumulated during this module's test run."""
         return self.findings

@@ -1,6 +1,7 @@
-# `scanner/core/session_manager.py`.
+"""
+`session_manager.py`
 
-"""Responsible for handling all authentication logic for the scanner.
+Responsible for handling all authentication logic for the scanner.
 Supports multiple authentication mechanisms (`form`, `bearer/JWT`, `basic`, `API key`) and abstracts them behind a
 single interface so that the rest of the scanner does not need to care how authentication is implemented for each role.
 
@@ -19,12 +20,17 @@ logger = get_logger(__name__)
 
 
 class SessionManager:
-    # Central manager that authenticates all the configured roles and stores their session states.
-    # Works closely with `HTTPClient`, which actually sends requests using these sessions.
+    """Central manager that authenticates all the configured roles, and stores their session states. WOrks closely qwith `HTTPClient`, which actually
+    sends requests using these sessions."""
 
     def __init__(self, config, http_client):
-        # `config:` is the global scanner configuration (`target URL`, `credentials`, `auth config`, etc.,)
-        # `http_client`: is the shared HTTP layer used across the scanner.
+        """Stores `config`, and `http_client`, and initialises `self.sessions` as an empty dict, ready to be populated by `authenticate_all`.
+
+        Args:
+            config (ScanConfig): Loaded scanner config providing credentials, login config, target URL, proxy, and SSL settings.
+
+            http_client (HTTPClient): The shared HTTP client, that is used to send all requests."""
+
         self.config = config
         self.http_client = http_client
 
@@ -36,8 +42,15 @@ class SessionManager:
         self.sessions = {}
 
     def _authenticate_form(self, cred: dict) -> bool:
-        # Handles the traditional HTML form login (e.g., DVWA style apps).
-        # Uses a dedicated `requests.Session` to persist cookies per role.
+        """Performs a form-based login for `cred`. Creates a fresh `requests.Session` per role, `GETs` the login page to extract CSRF toekns, andn hidden fields,
+        POSTs the full payload with redirects followed, then stores the authenticated session. Also executes any `post_auth_steps` defined in `login_config`,
+        for the admin role.
+
+        Args:
+            cred (dict): A single credential entry, from `config.credentials`, containing at minimum `username`, `password`, `role`, and `auth_type` keys.
+
+        Returns:
+            bool: 'True', if authentication suceeds, and thge session was stored. 'False', if the login request failed, or the final URL indicates an auth error."""
 
         login_cfg = self.config.login_config
 
@@ -51,8 +64,7 @@ class SessionManager:
                 "https": self.config.proxy,
             }
 
-        # Constructs full login URL safely.
-        # Uses the login URL directly if it is already absolute, otherwise prepends the base target URL.
+        # Constructs the full login URL safely by using the login URL directly if it is already absolute, otheerwise prepending the base target URL.
         raw_login_url = login_cfg["login_url"]
         if raw_login_url.startswith("http://") or raw_login_url.startswith("https://"):
             login_url = raw_login_url
@@ -77,10 +89,7 @@ class SessionManager:
             login_cfg["password_field"]: cred["password"],
         }
 
-        # Collects all named input fields from the login form, including submit buttons and hidden
-        # fields. This handles DVWA's `Login=Login` submit requirement (login.php only processes
-        # the POST when `isset($_POST['Login'])` is true) and any hidden CSRF token fields, without
-        # needing them to be explicitly configured. Credentials set above are not overwritten.
+        # COllects all the named login form fields, including hidden CSRF tokens, and submit buttons, without overwriting the credentials that are already set.
         if soup:
             login_form = soup.find("form")
             if login_form:
@@ -89,12 +98,14 @@ class SessionManager:
                     if not name:
                         continue
                     # Credentials are already set and must not be overwritten by form defaults.
-                    if name in (login_cfg["username_field"], login_cfg["password_field"]):
+                    if name in (
+                        login_cfg["username_field"],
+                        login_cfg["password_field"],
+                    ):
                         continue
                     field_type = field.get("type", "text").lower()
                     value = field.get("value", "")
-                    # Include submit buttons (always) and any field carrying a non-empty default
-                    # value (covers CSRF tokens, user_token, and similar hidden fields).
+                    # Include submit buttons (always) and any field carrying a non-empty default value.
                     if field_type == "submit" or value:
                         payload[name] = value
                         logger.debug(
@@ -107,11 +118,7 @@ class SessionManager:
                 payload["_csrf"] = meta_csrf["content"]
                 logger.debug(f"CSRF token found in meta tag for {cred['role']}")
 
-        # Submits the login request with redirects followed so that DVWA's PHP session is fully
-        # established after the server processes the redirect chain to `/index.php`.
-        # Stopping at the 302 (allow_redirects=False) leaves `fresh_session` holding a pre-auth
-        # PHPSESSID that DVWA has already invalidated server-side, causing every subsequent
-        # crawler request to receive the login page regardless of credentials.
+        # FOllows redirects during login, so that DVWA fully establishes the authenticated PHP session, and does not invalidate the session cookie, after the redirect chain.
         try:
             response = fresh_session.post(
                 login_url,
@@ -126,15 +133,12 @@ class SessionManager:
 
         success_indicator = str(login_cfg.get("success_indicator", "200"))
 
-        # With allow_redirects=True, the final response status is the post-redirect page (e.g., 200
-        # for index.php). Check `response.history` for the expected intermediate status code instead.
+        # With `allow_redirects=True`, checks `response.history`  for the expected intermediate status.
         got_expected_redirect = any(
             str(r.status_code) == success_indicator for r in response.history
         )
 
-        # Confirm the final URL is not a login or setup page, which would indicate auth failure.
-        # A 302 to /setup.php (DVWA not initialised) or a stay at /login.php (wrong credentials /
-        # bad CSRF token) are both caught here, regardless of the intermediate status code.
+        # Confirms the final URL is not a login, or setup page, indicating auth failure.
         final_url_lower = response.url.lower()
         ended_at_auth_page = any(
             indicator in final_url_lower for indicator in ("login", "setup")
@@ -145,16 +149,13 @@ class SessionManager:
             kw in body_lower for kw in ("invalid", "incorrect", "failed", "error")
         )
 
-        # Primary success path: redirect chain contained the expected status and the final page is
-        # not a login or setup page. Fallback covers apps that return 200 directly on success (no
-        # redirect), where the body also contains no error keywords.
+        # Primary success path, and fallback for paths that return 200 directly.
         auth_succeeded = (got_expected_redirect and not ended_at_auth_page) or (
             no_error and not ended_at_auth_page
         )
 
         if auth_succeeded:
-            # Stores the session data for later use. `fresh_session.cookies` is captured after the
-            # full redirect chain has completed, so the snapshot reflects the live authenticated state.
+            # Stores the auithenticated session, after the redirect chain completes, so that the saved cookies reflect the final valid login stte.
             self.sessions[cred["role"]] = {
                 "cookies": dict(fresh_session.cookies),
                 "session_obj": fresh_session,
@@ -202,11 +203,18 @@ class SessionManager:
         return False
 
     def _authenticate_bearer(self, cred: dict) -> bool:
-        # Handles the token-based authentication (e.g., `JWT APIs` like OWASP Juice Shop).
-        # Extracts tokens from the JSON response, and then stores it for a header injection.
+        """Performs a JSON post to the login endpoint, to obtain a JWT bearer token. Tries the keys `token`, `access_token`, `jwt``, and
+        `auth_token`, in the response body, as well as the nested `authentication` wrapper used by JS.
+
+        Args:
+            cred (dict): A single credential entry from `config.crederntials`, containing `username`, `password`, and `role`.
+
+        Returns:
+            bool: 'True', if a tokn was successfullyu extracted, and stored. 'False', if the login requerst failed, or no token field ould be found in the repsonse."""
 
         login_cfg = self.config.login_config
         raw_login_url = login_cfg["login_url"]
+
         # Uses the login URL directly if it is already absolute, otherwise prepends the base target URL.
         if raw_login_url.startswith("http://") or raw_login_url.startswith("https://"):
             login_url = raw_login_url
@@ -271,8 +279,13 @@ class SessionManager:
         return True
 
     def _authenticate_basic(self, cred: dict) -> bool:
-        # Handles HTTP Basic authentication.
-        # Encodes credentials and verifies its access via a test endpoint.
+        """Performs HTTP Basic authentication, by base64-encoding the credentials, and then verifying them against the `/api/` endpoint.
+
+        Args:
+            cred (dict): A single credential entry from `config.credentials`, containing `username`, `password`, and `role`.
+
+        Returns:
+            bool: 'True' iof the test request returned a 200, 201, or 204 response, and the credentials were stored. 'False' otherwise."""
 
         encoded = base64.b64encode(
             f"{cred['username']}:{cred['password']}".encode()
@@ -302,8 +315,13 @@ class SessionManager:
         return True
 
     def _authenticate_api_key(self, cred: dict) -> bool:
-        # Handles the `API` key authentication by storing the key in a header.
-        # No verification request is made here (its assumed valid if provided.)
+        """Stores API key authentication, by reading the key from  the `cred`, and buyilding the appropriate header. NO verification request is sent.
+
+        Args:
+            cred (dict): A single credential entry containing `api_key`, `role`, nd optionally `api_key_hader` (defaults to `X-API-KEY`).
+
+        Returns:
+            bool: 'True', if an `api_key` value was found, and stroed. 'False', if the `api_key` field is absent from `cred`."""
 
         api_key = cred.get("api_key")
 
@@ -323,8 +341,10 @@ class SessionManager:
         return True
 
     def authenticate_all(self) -> dict:
-        # The entry point used by the scanner to authenticate every configured role.
-        # Iterates through credentials and dipatches to the correct auth-handler.
+        """Iterates through all of the configured credentials, and dispatches each to the correct authentication handler, based on its `auth_type` field.
+
+        Returns:
+            dict: A mapping of `{role: bool}`, indicating whether authentication suceeeded for each configured role."""
 
         results = {}
 
@@ -350,9 +370,14 @@ class SessionManager:
         return results
 
     def get_session_kwargs(self, role: str) -> dict:
-        # The core abstraction used across the scanner.
         """It returns the correct request `kwargs` (cookies or headers) for a given role,
-        allowing other modules to remain completely auth-agnostic."""
+        allowing other modules to remain completely auth-agnostic.
+
+        Args:
+            role (str): The role name to look up, e.g., `user_a`, `admin`. Pass `None` for an unauthenticated request.
+
+        Returns:
+            dict: For form auth: `{'session_key': role}`. For bearer/basic/api_key: `{'headers': auth_header_dict, 'session_key': role}`. Returns an empty dict for unauthenticated requests, or if no session exists for the role"""
 
         # Returns empty kwargs immediately for unauthenticated requests, without logging a warning.
         if role is None:
@@ -369,10 +394,7 @@ class SessionManager:
         auth_type = session.get("auth_type")
 
         if auth_type == "form":
-            # Only `session_key` is returned so that `HTTPClient` routes requests through the live
-            # `fresh_session` object directly. Passing a `cookies=` snapshot alongside `session_key`
-            # would override the live cookie jar with a stale pre-redirect snapshot, causing DVWA to
-            # treat every crawler request as unauthenticated.
+            # Returns only `session_key`, so requests use the live authenticated session directly, rather than stale pre-redirect cookies, that would invalidate authentication.
             return {"session_key": role}
         elif auth_type in ("bearer", "basic", "api_key"):
             return {"headers": session["auth_header"], "session_key": role}
@@ -380,14 +402,28 @@ class SessionManager:
         return {}
 
     def get_cookies(self, role: str) -> dict:
-        # Helper to directly retrieve stored cookies for a role.
+        """Returns the stored cookies dict, for the given role.
+
+        Args:
+            role (str): The role name to look up.
+
+        Returns:
+            dict: The cookies dict for the role, or an empty dict if the role has no session, or the session contains no cookies."""
+
         session = self.sessions.get(role, {})
         return session.get("cookies", {})
 
     def get_all_roles(self) -> list:
-        # Returns all the roles that have been successfuly authenticated.
+        """Returns all the roles that have been successfuly authenticated.
+
+        Returns:
+            list[str]: ALl keys in `self.sessions`, representing authenticated roles."""
+
         return list(self.sessions.keys())
 
     def get_unauthenticated_kwargs(self) -> dict:
-        # Used when testing endpoints without authentication.
+        """Returns an empty dict, to be used as session kwargs, for unauthenticated requests.
+
+        Returns:
+            dict: An empty dict, ensuring no auth headers, or cookies, are attached."""
         return {}

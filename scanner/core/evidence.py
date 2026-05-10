@@ -25,7 +25,14 @@ class EvidenceCollector:
 
     def _sanitise_request(self, request_dict):
         """Deep copies `request_dict`, and redacts any field whose key contains 'password', 'token', or 'secret', to prevent credentials from
-        appearing in any report outputs."""
+        appearing in any report outputs.
+
+        Args:
+            request_dict (dict or None): The raw request dict to sanitise. Typicall contains keys e.g., `method`, `url`, `headers`, `body`.
+
+        Returns:
+            dict: A deep copy of `request_dict`, with sensitive fields replaced byt he string `[REDACTED]`. Returns an empty dict, if `request.dict`
+             is `None`."""
 
         # Deep copies the dictionary, to avoid mutating the original request data passed in by the caller.
         safe = copy.deepcopy(request_dict or {})
@@ -40,7 +47,14 @@ class EvidenceCollector:
 
     def _generate_diff(self, resp_a, resp_b):
         """Compares two response dictionaries, and returns a summary dictionary containing `status_match`, `body_length_a`, `body_length_b`,
-        and `similarity_ratio`, for inclusion in each evidence entry."""
+        and `similarity_ratio`, for inclusion in each evidence entry.
+
+        Args:
+            resp_a (dict or None): The baselin dictionary, typically containjing `status_code`, and `body` keys.
+            resp_b (dict or None): The test response dictionary, in the same ofrmat.
+
+        Returns:
+            dict: A summary dict with 4 keys: `status_match` (bool), `body_length_a` (int), `body_length_b` (int), and `similarity_ratio` (float rounded to 4 decimal places)."""
 
         # COnverts response bodies to strings, so `SequenceMatcher` can operate on them regardless of type.
         body_a = str(resp_a.get("body", "")) if resp_a else ""
@@ -71,7 +85,19 @@ class EvidenceCollector:
         notes="",
     ):
         """Builds a complete evidence dictionary from the provided baseline, and test request, and response pairs, generating a unique
-        SHA256 `id`, calculating a difference summary, and appending the entry to `self.evidence_store`."""
+        SHA256 `id`, calculating a difference summary, and appending the entry to `self.evidence_store`.
+
+        Args:
+            vuln_type (str): The vulnerability type string, e.g., `IDOR/BOLA`.
+            endpiont (str): The URL of tghe tested endpoint.
+            baseline_request (dict or None): The legitimnate authenticated request dict.
+            baseline_response (dict or None): The response to hte baseline request.
+            test_request (dict or None): The cross-role, or unauthenticated request dict.
+            test_response (dict or None): THe repsonse to thge test request.
+            notes (str): Optional free-text annotation
+
+        Returns:
+            str: The 16 character SHA256-derivec evidence ID assigned to the entry, for associating it with the corresponsing `Vulnerability` obeject."""
 
         # Captures the current UTC time, as an ISO 8601  string, for the evidence timestamp field.
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -111,13 +137,22 @@ class EvidenceCollector:
         return evidence_id
 
     def get_all_evidence(self):
-        """Returns `self.evidence_store` in full, for use by `HTMLReportGenerator`, and `JSONReportGenerator`."""
+        """Returns `self.evidence_store` in full, for use by `HTMLReportGenerator`, and `JSONReportGenerator`.
+
+        Returns"
+            list[dict]: THe complete list of evidence en try dicts, accumulated during the scan. Returns the live list, nota copy."""
 
         # Returns the list directly, rather than just a copy, so that the report generators work with the live store.
         return self.evidence_store
 
     def export_json(self, filepath):
-        """Serialises `self.evidence_store` to a JSON file at `filepath`. Will raise an `OSError` if the file cannot be written."""
+        """Serialises `self.evidence_store` to a JSON file at `filepath`. Will raise an `OSError` if the file cannot be written.
+
+        Args:
+            filepath (str): The absolute, or relative path to the output JSON file.
+
+        Raises:"
+            OSError: If the file cannot be written due to a permissions error, or invalid path."""
 
         # Writes the full evidence store to the given filepath, as indented JSON.
         with open(filepath, "w", encoding="utf-8") as file_handle:

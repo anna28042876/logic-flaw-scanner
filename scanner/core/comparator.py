@@ -27,31 +27,53 @@ logger = get_logger(__name__)
 
 
 class ResponseComparator:
-    # Minimum response size considered "real" content.
-    # Smaller responses are typically thought of as error pages, redirects or empty templates.
+    """Provides the static, and instance, methods for comparing HTTP responses. Its used by every test module
+    that needs to determine whether two responses differ in a security-relevant way e.g., identical body lengths,
+    shared senssitive fields, or the absence of denial phrases."""
+
     MIN_CONTENT_LENGTH = 200
 
     def __init__(self, min_content_length=None):
-        # Allows tuning of the minimum content threshold at runtime.
-        # Useful when scanning APIs or lightweight endpoints.
+        """Allows runtime override of the minimum content length threshold, used by `is_access_granted`.
+
+        Args:
+            min_content_length (int, optional): The ovveride for `MIN_CONTENT_LENGTH`. Useful for when scanning APIs, or lightweight
+             endpoint that return small, but valid payloads. If NOne, the class constant (200) is used."""
+
         if min_content_length is not None:
             self.MIN_CONTENT_LENGTH = min_content_length
 
     @staticmethod
     def compare_status(resp_a, resp_b):
-        # Basic check for whether both responses return the same HTTP status code.
-        # Useful for detecting obvious access control differences.
+        """Checks wether two responses share the same HTTP status code.
+
+        Args:
+            resp_a (requests.Response): The first response, typically the baseline authenticated response.
+            resp_b (requests.Response): The second response, typically the test e.g., cross role, or unauthenticated, response.
+
+        Returns:
+            bool: True, if both responses return the same status code, otherwise False."""
+
         return resp_a.status_code == resp_b.status_code
 
     @staticmethod
     def compare_body_length(resp_a, resp_b, threshold=0.1):
-        """Compares response body sizes to detect significant differences.
-        A small percentage threshold is also used instead of exact matching to account
-        for dynamic content such as timestamps, tokens, etc.,"""
+        """Compares response body sizes, using a relative threshold to account for dynamic content e.g., timestamps,
+        CSRF tokens, or per-request UUIDs.
+
+        Args:
+            resp_a (requests.Response): The first response to compare.
+            resp_b (requests.Response): The second response to compare.
+            threshold (float): The mazimum allowable relative size difference, as a fraction, (0.1 = 10%). Defaults to 0.1.
+
+            Returns:
+                bool: True if the relative size difference is within `threshold`. False if the bodies differ significantly. Also returns
+                True if both bodies are empty, and False if only one is empty."""
+
         len_a = len(resp_a.content)
         len_b = len(resp_b.content)
 
-        # If both are empty, treat as equivalent.
+        # If both are empty, treat as equivallent.
         if len_a == 0 and len_b == 0:
             return True
 
@@ -59,14 +81,23 @@ class ResponseComparator:
         if len_a == 0 or len_b == 0:
             return False
 
-        # Calculate the relative difference ratio.
+        # Calculates the relative difference ratio.
         ratio = abs(len_a - len_b) / max(len_a, len_b)
         return ratio <= threshold
 
     @staticmethod
     def compare_json_keys(json_a, json_b):
-        """Recursively extract all the JSON keys (including any nested ones) to compare
-        the structures rather than just the raw content."""
+        """Recursively extracts all JSON keys using dotted notation for nested keys from both objects, and returns a structural diff
+        showing which keys are unique to each and which are shared.
+
+        Args:
+            json_a (dict or list): The first parsed JSON value to compare.
+            json_b (dict or list): The second parsed JSON value to compare.
+
+        Returns:
+            dict: A dictionnary with three sets called 'keys_only_in_a',
+            'keys_only_in_b', and 'shared_keys', each containing dotted
+            key path strngs."""
 
         def extract_keys(obj, prefix=""):
             keys = set()
@@ -98,14 +129,32 @@ class ResponseComparator:
 
     @staticmethod
     def compare_body_text(body_a, body_b):
-        # Uses `SequenceMatcher` to compute the similarity ratio between two bodies.
-        # Helpful for detecting subtle differences even when lengths match.
+        """Calculates the textual similarity rati, between two response bodies, using `difflib.SequenceMatcher`.
+
+        Args:
+            body_a (str): The body teext of the first responce.
+
+            body_b (str): The body text of the second response.
+
+        Returns:
+            float: A ratio between 0.0 (completley different) and 1.0 (identicle)."""
+
         return difflib.SequenceMatcher(None, body_a, body_b).ratio()
 
     @staticmethod
     def extract_sensitive_fields(json_body, patterns=None):
-        # Identifies potentially sensitive fields in a JSON structure.
-        # Overall heuristic approach based on common naming conventions.
+        """Recursively walks through a parsed JSON structure, and returns all key-value pairs
+        whose key matches any of the provided sensitive field name patterns.
+
+        Args:
+            json_body (dict or list): The parsed JSON value to inspect.
+
+            patterns (list[str], optional): A list of case-insensitive regex patterns, to match against key names. Defaults to a 13-entry list covering
+                common PII, and credential field names e.g., email, name, token, password, balance, card, etc..
+
+        Returns:
+            dict: A flat dictionary of {key: value} pairs, where the key matched at least one sensitive pattern. Empty dict if no matches foundd."""
+
         if patterns is None:
             patterns = [
                 "email",
@@ -144,10 +193,21 @@ class ResponseComparator:
         return found
 
     def is_data_leak(self, resp_a_body, resp_b_body, role_a_identifier=None):
-        # Attempts to detect any data leakages between two responses.
-        # Typically used when comparing responses from different user roles.
-        # Accepts either response objects or raw body strings, normalising both to text
-        # before parsing. Callers in `horizontal_auth.py` pass response objects directly.
+        """Attempts to detect data leakages between two responses by checking whether a known identifier from role A appears in role B's response,
+        and by comparing sensitive fields that were extracted from both parsed JSON bodys.
+
+        Args:
+            resp_a_body (requests.Response or str): The baseline role A's response object, or body text.
+
+            resp_b_body (requests.Response or str): The test role B's response object, or body text.
+
+            role_a_identifier (str, optional): A known unique string for role A, e.g. their email adress, whose presence in role B's response
+            constituytes a confirmed leak.
+
+        Returns:
+            tuple: A two-element tuple of (bool, str). The bool is True if a leak is detected, otherwise its False. The `str` descibes the reason for the,
+            determination."""
+
         if hasattr(resp_a_body, "text"):
             resp_a_body = resp_a_body.text
         if hasattr(resp_b_body, "text"):
@@ -166,6 +226,7 @@ class ResponseComparator:
 
         """Fast-path detection where if a known identifier from Role A appears in Role B's response
         this is a strong identifier of a leak."""
+
         if role_a_identifier and role_a_identifier in resp_b_body:
             reason = f"Role A identifier '{role_a_identifier}' found in role B response body."
             logger.warning(reason)
@@ -192,8 +253,17 @@ class ResponseComparator:
         return False, "No data leak found."
 
     def is_access_granted(self, response):
-        # Determines whether a response represents genuine authenticated access.
-        # Prevents false positives from error pages that still return 200.
+        """Determines whether a response represents genuine access to a protected resource, rather than an error page that happens
+        to return HTTP 200.
+
+        Args:
+            response (requests.Response): The response to evaluate.
+
+        Returns:
+            bool: True, only if the response has status 200, does not contain common denial phrases, and has a body length of at least
+            `MIN_CONTENT_LENGTH` bytes. False in all other cases.
+        """
+
         denial_strings = [
             "access denied",
             "forbidden",
@@ -221,8 +291,15 @@ class ResponseComparator:
         return True
 
     def generate_diff_report(self, resp_a, resp_b):
-        # Generates human-readable reports used by the reporting layer.
-        # Useful for debugging and inclusion in vulnerability findings.
+        """Generates a human-raedable comparison report, between two responses, including status match, body length comparison, similarity
+        ratio, and a unified diff of the first 2000 chasracters of each body.
+
+        Args:
+            resp_a (requests.Response): The baseline response e.g., authenticated.
+            resp_b (requests.Response): The test response e.g., cross-role or unauthenticated.
+
+        Returns:
+            str: A formatted multiline string, showing the conmparison results, and a unified diff, suitable for inclusion in vulnerability evidence ."""
 
         # Limits body size to avoid excessive outputs in reports.
         body_a = resp_a.text[:2000]

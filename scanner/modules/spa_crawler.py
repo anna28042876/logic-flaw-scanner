@@ -20,10 +20,8 @@ class SPACrawler:
     # Playwright-based crawler for Javascript-rendered SPAs.
 
     def __init__(self, config, session_manager, scope_enforcer):
-        """Stores `config`, `session_manager`, and `scope_enforcer` for use across
-        all crawl methods. Initialises `self.api_calls`, and
-        `self.discovered_endpoints` as empty lists, so they're ready for population by
-        `crawl_with_browser`."""
+        """Stores `config`, `session_manager`, and `scope_enforcer` for use across all crawl methods. Initialises `self.api_calls`, and
+        `self.discovered_endpoints` as empty lists, so they're ready for population by `crawl_with_browser`."""
 
         self.config = config
         self.session_manager = session_manager
@@ -32,17 +30,21 @@ class SPACrawler:
         self.discovered_endpoints = []
 
     def _setup_request_interceptor(self, page):
-        """Registers `_on_request` and `_on_response` as Playwright event handlers
-        on the given `page`, so that all outgoing and incoming browser network
-        traffic is captured during the crawl session."""
+        """Registers `_on_request` and `_on_response` as Playwright event handlers on the given `page`, so that all outgoing and
+        incoming browser network traffic is captured during the crawl session.
+
+        Args:
+            page (playwright.sync_api.Page): The playwright page object on which to register the requst, and response event listeners."""
 
         page.on("request", self._on_request)
         page.on("response", self._on_response)
 
     def _on_request(self, request):
-        """Executed on every outgoing browser request. Logs any in-scope URLs and appends
-        XHR, and Fetch calls (Juice Shop's Angular API traffic) to `self.api_calls`
-        as dictionaries containing url, method, headers, and post_data."""
+        """Executed on every outgoing browser request. Logs any in-scope URLs and appends XHR, and Fetch calls (Juice Shop's Angular API traffic)
+        to `self.api_calls` as dictionaries containing url, method, headers, and post_data.
+
+        Args:
+            request (playwright.sync_api.Request): THe playwright request object, emitted byu tthe browser for each outgoing network call."""
 
         url = request.url
         # Skips out-of-scope requests, and only processes URLs within the configured target domain.
@@ -60,9 +62,11 @@ class SPACrawler:
                 )
 
     def _on_response(self, response):
-        """Executes on every incoming browser response. Logs status codes, and
-        content-types for any URLs already captured in `self.api_calls`, giving
-        visibility into what Juice Shop returns for each intercepted API call."""
+        """Executes on every incoming browser response. Logs status codes, and content-types for any URLs already captured in `self.api_calls`,
+        giving visibility into what Juice Shop returns for each intercepted API call.
+
+        Args:
+            response (playwright.sync_api.Response): The playwright response object, emitted by the browser for each incoming network response."""
 
         url = response.url
         is_api_response = any(call["url"] == url for call in self.api_calls)
@@ -72,9 +76,17 @@ class SPACrawler:
             logger.debug(f"API response: {response.status} {content_type} {url}")
 
     def _convert_cookies_for_playwright(self, cookies_dict, target_url):
-        """Converts the `{name: value}` cookies dictionary returned by `session_manager`
-        into Playwright's required list-of-dictionaries format, using the target domain
-        and root path. Used for form-based auth targets such as DVWA."""
+        """Converts the `{name: value}` cookies dictionary returned by `session_manager` into Playwright's required list-of-dictionaries format, using
+        the target domain and root path. Used for form-based auth targets such as DVWA.
+
+        Args:
+            cookies_dict (dict): Cookie name-to-value mapping, as returned by `SessionManager.get_cookies`.
+
+            target_url (str): THe absolute base URL of the target, used to extract the hostnames for each cookie entry.
+
+        Returns:
+            list[dict]: A list of Playwright cookie dicts, each containing `name`, `value`, `domain`, and `path`. Returns an empty list if `cookies_dict`
+            is empty, or `None`."""
 
         # Returns early if no cookies were provided, which avoids unnecessary processing.
         if not cookies_dict:
@@ -87,10 +99,8 @@ class SPACrawler:
         ]
 
     def crawl_with_browser(self, role=None):
-        """Launches headless Chromium, injects credentials for the given `role`
-        (Authorization header for Juice Shop bearer auth, context cookies for
-        DVWA form auth), clicks all safe interactive elements, and records unique
-        SPA routes visited. Then populates `self.api_calls` and
+        """Launches headless Chromium, injects credentials for the given `role` (Authorization header for Juice Shop bearer auth, context cookies for
+        DVWA form auth), clicks all safe interactive elements, and records unique SPA routes visited. Then populates `self.api_calls` and
         `self.discovered_endpoints`."""
 
         # Destrucive action keywords whose matching elements are skipped to prevent irreversible state changes on JS or DVWA during discoveru.
@@ -191,9 +201,11 @@ class SPACrawler:
         self.discovered_endpoints = self.get_api_endpoints()
 
     def get_api_endpoints(self):
-        """Converts each entry in `self.api_calls` into an `Endpoint` dataclass, and
-        returns the full list. Called after `crawl_with_browser` to hand the discovered
-        Juice Shop API endpoints to the rest of the scanner pipeline."""
+        """Converts each entry in `self.api_calls` into an `Endpoint` dataclass, and returns the full list. Called after `crawl_with_browser` to hand the discovered
+        Juice Shop API endpoints to the rest of the scanner pipeline.
+
+        Returns:
+        list[Endpoint]: 1 `Endpoint` per per captured XHR/Fetch call, with `url`, and `method` populated from the intercepted request data."""
 
         endpoints = []
         # Converts each captured XHR/Fetch call dictionary into a typed `Endpoint` object.

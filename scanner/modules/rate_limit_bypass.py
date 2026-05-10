@@ -32,22 +32,15 @@ class RateLimitBypassTester:
         self.detection_results = detection_results
         # Accumulates all confirmed bypass findings as `Vulnerability` objects.
         self.findings = []
-
-    def __init__(self, config, http_client, detection_results):
-        """Stores `config`, `http_client`, and `detection_Results` from `RateLimitDetector`. Initialises
-        `self.findings` as an empty list, ready to accumulate the bypass findings."""
-        self.config = config
-        self.http_client = http_client
-        # Holds the per-endpoint detection outcomes, produced by `RateLimitDetector`, for baseline comparisons.
-        self.detection_results = detection_results
-        # Accumulates all confirmed bypass findings as `Vulnerability` objects.
-        self.findings = []
         # Seeds the random number generator with the fixed seed from `config` for reproducibility.
         random.seed(config.random_seed)
 
     def _generate_random_ip(self):
         """Generates a random IPv4 address in the public range, avoiding reserved prefixes, for use as a spoofed
-        value in IP bypass header tests."""
+        value in IP bypass header tests.
+
+        Returns:
+            str: A random IPv4 address string in the format `A.B.C.D`, with the first octet in tghe 1-223 to avoid reserved address blocks."""
 
         # Keeps the first octet between 1-223, to stay within the bounds of public unicast range.
         return (
@@ -60,7 +53,10 @@ class RateLimitBypassTester:
     def _generate_user_agent(self):
         """Returns a random real browser user agent string, from a hardcoded list
         of 20 entries covering Chrome, Firefox, Safari, and Edge, across WIndows,
-        macOS, and Linux."""
+        macOS, and Linux.
+
+        Rerturns:
+            str: 1 randomly selected `User-Agent` string from the list."""
 
         # Covers a broad range of real browsers and operating systems to avoid pattern-based detection.
         user_agents = [
@@ -89,14 +85,27 @@ class RateLimitBypassTester:
 
     def _count_429s(self, responses):
         """Counts the number of 429 status codes in a list of response objects, returning
-        the integer total for comparison against a baseline count."""
+        the integer total for comparison against a baseline count.
+
+        Args:
+            responses (list): A list of `request.Response` objects, or `NOne` entries (`None` entries are skipped.)
+
+        Returns:
+            int: THe count of responses with `status_code == 429`."""
 
         # Guards against NOne entries in the list, which occurs when a request raises an exception.
         return sum(1 for r in responses if r is not None and r.status_code == 429)
 
     def _get_baseline_429_count(self, endpoint_url):
         """Retrieves the number of 429 responses recorded during `RateLimitDetector` dectection for `endpoint_url`,
-        from `self.detection_results`. Returns zero if no entry exists."""
+        from `self.detection_results`. Returns zero if no entry exists.
+
+        Args:
+            endpoint_url (str): The absolute URL of the endpoint to look up.
+
+        Returns:
+            int: THe `first_429_at` value. from `self.detection_results` used as a proxy for the baseline 429 count, or `0` if no detection
+            entry exists, or the endpoint was not rate-limited."""
 
         result = self.detection_results.get(endpoint_url, {})
 
@@ -109,7 +118,11 @@ class RateLimitBypassTester:
     def test_xff_bypass(self, endpoint_url, total_requests=200):
         """Sends `total_requests` POST requests, to `endpoint_url`, rotating the `X-Forwarded-For` header to a new,
         random IP each time. Flags a 'High' `Vulnerability`, if significantly fewer 429 responses are returned compared
-        to the amount captured in the baseline."""
+        to the amount captured in the baseline.
+
+        Args:
+            endpoint_url (str): The absolute URL of the endpoint to test.
+            total_requests (int): NUmber of requests to send, defaults to 200."""
 
         responses = []
         # Sends each request with a freshly generated random IP, in the `X-Forwarded-For` header.
@@ -158,7 +171,10 @@ class RateLimitBypassTester:
 
     def test_ip_header_variants(self, endpoint_url):
         """Tests seven alternative IP identification headers, individually agains `endpoint_url`, sending 50 requests per header.
-        Then flags a 'High' `Vulnerability`, for any header that reduces 429 responses below the bypass success threshold."""
+        Then flags a 'High' `Vulnerability`, for any header that reduces 429 responses below the bypass success threshold.
+
+        Args:
+            endpoint_url (str): The absolute URL of the endpoint to test."""
 
         # Lists all seven alternative IP headers, to test individually for rate limit bypass.
         ip_headers = [
@@ -219,7 +235,10 @@ class RateLimitBypassTester:
     def test_user_agent_rotation(self, endpoint_url):
         """Sends 100 POST requests, to `endpoint_url`, rotating the `User-Agent` header on every request.
         Flags a 'High' `Vulnerability`, if significantly fewer 429 responses are captured compared to the
-        number within the baseline."""
+        number within the baseline.
+
+        Args:
+            endpoint_url (str): The asbolute URL of the endpoint to test."""
 
         responses = []
         # Sends each request with a randomly slected real browser user agent string.
@@ -276,9 +295,7 @@ class RateLimitBypassTester:
         base = f"{parsed.scheme}://{parsed.netloc}"
         path = parsed.path.rstrip("/")
 
-        # Generates case , and punctuation variants, of the endpoint path to test the URL normalisation in the rate limiter.
-        # B4: Fragment (#) and bare query string (?) variants are excluded — the # character is never
-        # transmitted to the server, and an empty query string renders identically to the canonical URL.
+        # Generates case , and punctuation variants, of the endpoint path for URL normalisation testing, whilst excluding fragments, and empty query strings that dont alter server request.
         variants = [
             base + path.capitalize(),
             base + path.upper(),
@@ -286,8 +303,7 @@ class RateLimitBypassTester:
             base + path + "%20",
         ]
 
-        # B4: Only run when the canonical endpoint is already rate-limited — a single-request 200
-        # check is not a valid bypass signal. Sends a burst of 50 requests per variant instead.
+        # B4: Only tests bypass variants, after  confirming the original endpoint is rate limited, using a burst of request rather than a singler esponse of the validation signal.
         baseline = self._get_baseline_429_count(endpoint_url)
         if baseline == 0:
             logger.debug(
@@ -345,7 +361,10 @@ class RateLimitBypassTester:
 
     def test_method_switching(self, endpoint_url):
         """Sends 50 PUT, and 50 PATCH requests to `endpoint_url`, and compares the 429 count against the POST baseline.
-        FLags a 'High' `Vulnerability`, if either of the alternative methods bypass rate limiting."""
+        FLags a 'High' `Vulnerability`, if either of the alternative methods bypass rate limiting.
+
+        Args:
+            endpoint_url (str): The absolute URL of the endpoint to test."""
 
         baseline = self._get_baseline_429_count(endpoint_url)
         # Iterates PUT, and PATCH, as alternative methods to check whether rate-limiting is POST-specific.
@@ -396,7 +415,10 @@ class RateLimitBypassTester:
     def test_parameter_pollution(self, endpoint_url):
         """Sends 100 POST requests to `ednpoint_url`, appending a unique dunmmy query parameter to each URL. Will
         falg a 'High' `VUlnerability` if the 429 responses see a significant drop below the baseline, therefore,
-        indicating that the rate limiter keys on the full URL, rather than on the path."""
+        indicating that the rate limiter keys on the full URL, rather than on the path.
+
+        Args:
+            endpoint_url (str): The absolute URL of the endpoint to test."""
 
         responses = []
         # Sends each request with a unique cache-busting query parameter, thats appended to the URL.
@@ -443,7 +465,10 @@ class RateLimitBypassTester:
     def test_all_bypasses(self, endpoint_url):
         """Runs all six bypass techniques agains `endpoint_url` in sequence, including XFF rotation,
         IP header variants, user agent rotation, URL case variation, method switching, and parameter
-        pollution."""
+        pollution.
+
+        Args:
+            endpoint_url (str): The absolute URL of the endpoint to test."""
 
         logger.info("Running all bypass techniques against %s.", endpoint_url)
         # Runs each bypass method in sequence, so all techniques are tested regardless of earlier results.
@@ -457,7 +482,10 @@ class RateLimitBypassTester:
     def test_all_endpoints(self, all_detection_results):
         """Iterates every ednpoint in `all_detection_results`, regardless of `rate_limited` status, and runs
         `test_all_bypasses` on each. This generates bypass evidence for rate-limited endpoints, and additional
-        confirmation evidence for endpoints with no rate-limiting detected."""
+        confirmation evidence for endpoints with no rate-limiting detected.
+
+        Args:
+            all_detection_results (dict): THe complete detection results dict from `RateLimitDetector.detection_results`, keyed by endpint URL."""
 
         logger.info(
             "Running bypass tests against all %d detected endpoint(s).",
@@ -468,5 +496,8 @@ class RateLimitBypassTester:
             self.test_all_bypasses(endpoint_url)
 
     def get_findings(self):
-        """Returns `self.findings` accumulated across all the rate-limit bypass tests."""
+        """Returns `self.findings` accumulated across all the rate-limit bypass tests.
+
+        Returns:
+            list[Vulnerability]: All `High` bypass findings (XFF, IP header, UA rotation, URL variation, method switching, parameter pollution) recorded during this module's test run."""
         return self.findings

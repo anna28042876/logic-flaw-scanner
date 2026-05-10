@@ -29,10 +29,7 @@ NUMERIC_ID_PATTERN = re.compile(r"^\d+$")
 # Matches a forward slash followed by one or more digits, in a URL path to locate numeric resource ID segments.
 URL_NUMERIC_SEGMENT_PATTERN = re.compile(r"/\d+")
 
-# REST collection path patterns whose individual items are user-scoped. Matches Juice Shop API
-# collections (/api/Users, /api/BasketItems, /api/Feedbacks, etc.) and DVWA query-param endpoints
-# whose responses contain per-user records. The heuristic is intentionally broad: false positives
-# are filtered downstream by the ID-extraction strategies in `_get_user_resource_id`.
+# Broad collection path patterns used to iddentify potentially user scoped resources, with false positives filetered later by ID extraction logic.
 USER_SCOPED_COLLECTION_PATTERNS = re.compile(
     r"/api/(Users|BasketItems|Feedbacks|Complaints|Recycles|Addresss|Cards|Deliverys)"
     r"|/rest/(user|wallet|order-history|memories)"
@@ -73,7 +70,15 @@ class HorizontalAuthTester:
 
         `endpoint_params` is keyed by URL string (as produced by `ParameterEnumerator`), not by
         (method, url) tuple. The previous (method, url) lookup always returned an empty list,
-        which caused criterion 3 to never fire."""
+        which caused criterion 3 to never fire.
+
+        Args:
+            endpoints (list[Endpoint]): All discovered endpoints from the crawl phase.
+
+            endpoint_params (dict): Mapping of `{endpoint_url: list[Parameter]}`, as produced by `ParameterEnumerator`,
+
+        Returns:
+            list[Endpoint]: THe subset of `endpointsd` that match at leastt 1 user-specific heuristic, and are therefore IDOR test candidates."""
 
         user_specific = []
 
@@ -109,7 +114,13 @@ class HorizontalAuthTester:
 
         Handles two common Juice Shop response shapes: the direct `{"id": N}` shape used by most
         endpoints, and the `{"data": {"id": N}}` and `{"user": {"id": N}}` wrapper shapes used by
-        collection endpoints and `/rest/user/whoami` respectively."""
+        collection endpoints and `/rest/user/whoami` respectively.
+
+        Args:
+            body (dict): The parsed JSON response body to inspect.
+
+        Returns:
+            str or NOne: The fist numeric  ID value, found as a string, or `None` if no recognisable ID field is present."""
 
         if not isinstance(body, dict):
             return None
@@ -124,19 +135,27 @@ class HorizontalAuthTester:
             nested = body.get(wrapper_key)
             if isinstance(nested, dict):
                 for key, value in nested.items():
-                    if key.lower() in ("id", "userid", "user_id") and str(value).isdigit():
+                    if (
+                        key.lower() in ("id", "userid", "user_id")
+                        and str(value).isdigit()
+                    ):
                         return str(value)
 
         return None
 
     def _get_user_resource_id(self, endpoint, role):
         """Attempts three strategies to find a resource ID owned by the specified role. Self-referencing API endpoints, crawled JSON
-        list endpoints, then config-provided known IDs. Returns the first ID found as a string, or None if all three strategies fail."""
+        list endpoints, then config-provided known IDs. Returns the first ID found as a string, or None if all three strategies fail.
 
-        # Strategy 1 tries Juice Shop and common self-referencing API paths, to extract the role's own numeric ID.
-        # `/rest/user/whoami` is tried first because Juice Shop returns `{"user": {"id": N}}` from that endpoint,
-        # and in Juice Shop v17.1.1 the basket ID equals the user ID, making the whoami ID directly usable
-        # for basket, feedback, and review IDOR tests.
+        Args:
+            endpoint (Endpoint): The endpoint being tested, used as the list resource in strategy 2.
+
+            role (str): The role named whose owned resource ID should be found.
+
+        Returns:
+            str or None: THe role's numeric resource ID as a tring, or `None` if all 3 stratgies fail."""
+
+        # Attempts to extract the role's numeric user ID from common self referencing API endpoints, using `/rest/user/whoami` first because JS reutrns the authenticated user ID directly.
         self_ref_paths = [
             "/rest/user/whoami",
             "/api/Users/whoami",
@@ -149,7 +168,9 @@ class HorizontalAuthTester:
         for path in self_ref_paths:
             url = self.config.target_url.rstrip("/") + path
             try:
-                response = self.http_client.send_request("GET", url, session_key=role)[0]
+                response = self.http_client.send_request("GET", url, session_key=role)[
+                    0
+                ]
                 # Skips this path if no response was received, or the server did not return 200.
                 if response is None or response.status_code != 200:
                     continue
@@ -168,8 +189,7 @@ class HorizontalAuthTester:
                     f"Self-referencing path {path} failed for role {role}: {exc}"
                 )
 
-        # Strategy 2 tries the endpoint itself as a list resource, and cross-references returned IDs with the role's email.
-        # Finds the matching credential dict from the credentials list by role field.
+        # Attempts to identify te user specific resourece IDs, by querying collection endpoints, and matching returned records against the roles configured email address.
         role_credentials = next(
             (c for c in self.config.credentials if c.get("role") == role), {}
         )
@@ -206,7 +226,9 @@ class HorizontalAuthTester:
                         if isinstance(data, list):
                             for item in data:
                                 if isinstance(item, dict):
-                                    item_email = item.get("email", item.get("username", ""))
+                                    item_email = item.get(
+                                        "email", item.get("username", "")
+                                    )
                                     item_id = item.get("id")
                                     if (
                                         item_email
@@ -244,7 +266,15 @@ class HorizontalAuthTester:
 
     def _build_url_with_id(self, endpoint, id_value):
         """Substitutes the first numeric segment in the endpoint URL with `id_value`, then returns the modified URL string, or
-        the original URL if no numeric segment is found."""
+        the original URL if no numeric segment is found.
+
+        Args:
+            endpoint (Endpoint): The endpoint whose URL is to be modified.
+
+            id_value (str or int): THe resource ID to substitute into the URL.
+
+        Returns:
+            str: The modified URL with the first numeric ssegment replaced, or the original URL if no numeric segment is found."""
 
         substituted = URL_NUMERIC_SEGMENT_PATTERN.sub(
             f"/{id_value}", endpoint.url, count=1
@@ -253,7 +283,16 @@ class HorizontalAuthTester:
 
     def test_idor_read(self, endpoint, id_param, role_a="user_a", role_b="user_b"):
         """Tests whether `role_b` can read a resource owned by `role_a`, by substituting `role_a`'s resource ID into a request sent
-        with `role_b`'s session. Also tests the reverse, and flags critical IDOR findings when a data leak is confirmed."""
+        with `role_b`'s session. Also tests the reverse, and flags critical IDOR findings when a data leak is confirmed.
+
+        Args:
+            endpoint (Endpoint): THe user-specific endpoint to test.
+
+            id_param (Parameter or NOne): THe ID-type parameter for this endpoint, used for logging. Actual ID values are retrieved from `get_user_resource_id`.
+
+            role_a (str): THe owning role, defaults to `user_a`.
+
+            role_b (str): The attacking role, defaults to `user_b`."""
 
         id_a = self._get_user_resource_id(endpoint, role_a)
         id_b = self._get_user_resource_id(endpoint, role_b)
@@ -306,8 +345,7 @@ class HorizontalAuthTester:
             if response_attacker.status_code != 200:
                 continue
 
-            # Step c uses `ResponseComparator` to determine whether the attacker received the owner's data.
-            # `compare_body_length` returns a raw bool — True means lengths are within the configured threshold.
+            # Uses `ResponseComparator` to chekc whether the attacker received the owners data, by comparing response similarity, and body length differences.
             length_result = self.comparator.compare_body_length(
                 response_owner, response_attacker
             )
@@ -355,7 +393,16 @@ class HorizontalAuthTester:
 
     def test_idor_write(self, endpoint, id_param, role_a="user_a", role_b="user_b"):
         """Tests whether `role_b` can modify a resource owned by `role_a`, by sending a POST, PUT, PATCH, or DELETE request with
-        `role_a`'s resource ID, using `role_b`'s session. Flags critical IDOR findings when the server returns 200 or 204."""
+        `role_a`'s resource ID, using `role_b`'s session. Flags critical IDOR findings when the server returns 200 or 204.
+
+        Args:
+            endpoint (Endpoint): TRhe write-method endpoint to test.
+
+            id_param (Parameter or NOne): The ID-type parameter for this endpoint.
+
+            role_a (str): THe resource owner role, defaults to `user_a`.
+
+            role_b (str): The attacking role, defaults to `user_b`."""
 
         write_methods = ("POST", "PUT", "PATCH", "DELETE")
 
@@ -442,7 +489,14 @@ class HorizontalAuthTester:
     def test_idor_enumeration(self, endpoint, id_param, role="user_a"):
         """Enumerates the IDs numerically, above and below the role's own ID, to detect accessible foreign records.
         Skips UUID-format IDs entirely. Stops early after three consecutive 404 responses in either direction, and flags
-        critical findings for each accessible record."""
+        critical findings for each accessible record.
+
+        Args:
+            endpoint (Endpoint): The endpoint to enumerate.
+
+            id_param (Parameter or NOne): The ID-type parameter for this endpoint.
+
+            role (str): The role performing the enumeration, defaults to `user_a`."""
 
         own_id_str = self._get_user_resource_id(endpoint, role)
 
@@ -549,16 +603,18 @@ class HorizontalAuthTester:
 
     def test_all_idor(self, endpoints, endpoint_params):
         """Manages all three IDOR test types across every user-specific endpoint identified by `_identify_user_specific_endpoints`.
-        Calls `test_idor_read`, `test_idor_write`, and then `test_idor_enumeration` for each endpoint in sequence."""
+        Calls `test_idor_read`, `test_idor_write`, and then `test_idor_enumeration` for each endpoint in sequence.
 
-        # Skips the entire IDOR module when the required user_a and user_b sessions are not present,
-        # avoiding failed HTTP requests and warning-level log noise on single-role targets such as DVWA.
+        Args:
+            endpoiints (list[Endpoint]): All discovered endpoints from the crawl phase.
+
+            endpoint_params (dict): Mapping of `{endpoint_url: list[Parameter]}`, as produced by `ParameterEnumerator`."""
+
+        # Skips IDOR testing when both `user_a`, and `user_b` sessions re not available to avoid unneccessary requests on singl role targets such as DVWA.
         required_roles = ["user_a", "user_b"]
         missing = [r for r in required_roles if r not in self.session_manager.sessions]
         if missing:
-            logger.info(
-                f"Skipping IDOR tests — no sessions for: {missing}."
-            )
+            logger.info(f"Skipping IDOR tests — no sessions for: {missing}.")
             return
 
         targets = self._identify_user_specific_endpoints(endpoints, endpoint_params)
@@ -578,5 +634,7 @@ class HorizontalAuthTester:
             self.test_idor_enumeration(endpoint, id_param)
 
     def get_findings(self):
-        """Returns the complete list of `Vulnerability` objects, recorded during horizontal authorisation testing."""
+        """Returns the complete list of `Vulnerability` objects, recorded during horizontal authorisation testing.
+
+        list[VUlnerability]: All `Critical` findings e.g., IDDOR read, write, and enumeration, accumulated during tthis module's test run."""
         return self.findings

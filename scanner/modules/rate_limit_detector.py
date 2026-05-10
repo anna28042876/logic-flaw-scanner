@@ -14,8 +14,7 @@ from scanner.core.models import Vulnerability
 
 logger = get_logger(__name__)
 
-# Sent as the email credential on all login endpoint rate limit tests, to avoid valid JWT generations, or account lockouts.
-# Clearly anonymous, dummy info.
+# Sent as the email credential on all login endpoint rate limit tests, to avoid valid JWT generations, or account lockouts. Clearly anonymous, dummy info.
 RATE_LIMIT_TEST_EMAIL = "janedoe@fake.local"
 RATE_LIMIT_TEST_PASSWORD = "RateLimitTestPass1!"
 
@@ -40,7 +39,18 @@ class RateLimitDetector:
     ):
         """Sends `total_requests`, requests, to `endpoint_url` at `rps` requests per second, recording status codes, elapsed
         time, and rate limit headers. Creates a 'Medium' `Vulnerability` when no rate limiting is detected, and stores the outcome
-        in `self.detection_results`."""
+        in `self.detection_results`.
+
+        Args:
+            endpoint_url (str): The absolute URL of the endpoint to test.
+
+            method (str): The HTTP method to use for each request, defaults to `POST` which is appropriate for login endpoints.
+
+            body (dict, optional): The request body to send with each `POST` request, deffaults to a safe dummy credential dict for login-pattern endpoints.
+
+            total_requests (int, optional): NUmber of requuests to send, falls backto `config.rate_limit_config['total_requests']` if `None`.
+
+            rps (int, optional): Targrt requests per  second, falls back to `config.rate_limit_config['rps']` if `None`."""
 
         # Falls back to the configuration defaults, when `total_requests`, or `rps`, are not provided by the caller.
         if total_requests is None:
@@ -201,7 +211,13 @@ class RateLimitDetector:
 
     def _identify_critical_endpoints(self, endpoints):
         """Filters `endpoints` to those whose URL paths matches common authentication, and credential-handling route
-        segments on Juice SHop, and DVWA. Then returns a list of matching `Endpoint` objects."""
+        segments on Juice SHop, and DVWA. Then returns a list of matching `Endpoint` objects.
+
+        Args:
+            endpoints (list[Endpoint]): All discovered endpoints from the crawl phase.
+
+        Returns:
+            list[Endpoint]: The subset of endpoints, whose URL contains at least 1 critical path pattern, e.g., `/login`, `/auth`, `/register`, `/token`."""
 
         # Defines the path patterns that identify authentication, and credential endpoints on Juice Shop, and DVWA.
         critical_patterns = [
@@ -231,7 +247,10 @@ class RateLimitDetector:
 
     def detect_all(self, endpoints):
         """Calls '_identify_critical_endpoints` on `endpoints`, then runs `detect_rate_limit` on each result, populating
-        `self.findings`, and `self.detection_results`."""
+        `self.findings`, and `self.detection_results`.
+
+        Args:
+            endpoints (list[Endpoint]): All discovered endpoints from the crawl phase."""
 
         critical_endpoints = self._identify_critical_endpoints(endpoints)
         logger.info(
@@ -243,5 +262,8 @@ class RateLimitDetector:
             self.detect_rate_limit(endpoint.url, method=endpoint.method)
 
     def get_findings(self):
-        """Returns `self.findings` accumulated acrosds all the rate-limiting detection tests."""
+        """Returns `self.findings` accumulated acrosds all the rate-limiting detection tests.
+
+        Returns:
+            list[VUlnerability]: All `Medium` (Missing Rate Limiting) findings, recorded during this module's test run."""
         return self.findings

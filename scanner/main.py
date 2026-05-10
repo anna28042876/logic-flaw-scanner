@@ -50,15 +50,26 @@ class Scanner:
         self, config_path, output_dir="reports/", modules="all", verbose=False
     ):
         """Loads, and validates `ScanConfig`, configures the logger, and instantiates all the shared core components.
-        Parses the `modules` string into a set for `_should_run`, to query throughout the scan pipeline."""
+        Parses the `modules` string into a set for `_should_run`, to query throughout the scan pipeline.
+
+        Args:
+            config_path (str): Path to the YAML confic for the target scan.
+
+            output_dir (str): Directory where HTML, and JSON report files are wrtiten, defaults to `reports/`.
+
+            modules (str): COmma-separated list of module tokens e.g., `crawl,idor,ratelimit`, or hte sentinel string `all` to run evrey module, defaults to `all`.
+
+            verbose (bool): If `TRue`, it sets the console log level to `DEBUG`, and defaults to `FALSE` (INFO level).
+
+        Raises:
+            FileNOtFoundError: if `config_path` doesn't exist.
+            ValueError: IF the YAML config fails `ScanConfig.validate()`."""
 
         # Loads the YAML config file, via `ScanConfig`, and immediately validates required fields.
         self.config = ScanConfig(config_path)
         self.config.validate()
 
-        # Sets DEBUG Logging when verbose is requested, otherwise it restricts console output to INFO.
-        # Called without arguments so the logger is registered under the "scanner" hierarchy that all
-        # sub-modules propagate to via `get_logger(__name__)`.
+        # Enables DEBUG Logging, when the verbose mode is used, and initialises the root `scanner` logger shared bny all sub modules.
         setup_logger()
 
         # Creates the shared `HTTPClient` with the loaded config file, so that all modules use the same session pool.
@@ -90,24 +101,32 @@ class Scanner:
             len(self.config.credentials) if self.config.credentials else 0
         )
         # Formats the current UTC time as a readable string.
-        timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+        timestamp = datetime.datetime.now(datetime.UTC).strftime(
+            "%Y-%m-%d %H:%M:%S UTC"
+        )
 
         # Builds the full banner string, using f-string formatting with left-padded fields.
         banner = f"""
-╔══════════════════════════════════════════════════════════════╗
-║          Logic Flaw Scanner  v{SCANNER_VERSION}                          ║
-║          Semi-Automated Web Vulnerability Discovery          ║
-╠══════════════════════════════════════════════════════════════╣
-║  Target   : {self.config.target_url:<49}║
-║  Roles    : {credential_count:<49}║
-║  Started  : {timestamp:<49}║
-╚══════════════════════════════════════════════════════════════╝
+|--------------------------------------------------------------|
+|          Logic Flaw Scanner  v{SCANNER_VERSION}              |            ║
+|          Semi-Automated Web Vulnerability Discovery          |
+|--------------------------------------------------------------|
+|  Target   : {self.config.target_url:<49}║                    |
+|  Roles    : {credential_count:<49}║                          |
+|  Started  : {timestamp:<49}║                                 |
+|--------------------------------------------------------------|
         """
         print(banner)
 
     def _should_run(self, module_name):
         """Returns 'True' when the module named `module_name` is included in the scan run, either because `self.modules` is set
-        to the sentinel value 'all', or because `module_name` is present in the parsed module set."""
+        to the sentinel value 'all', or because `module_name` is present in the parsed module set.
+
+        Args:
+            module_name (str): The short module token to check e.g., `crawl`, `idor`, `ratelimit`.
+
+        Returns:
+            bool: `True`, if self.modules is the sentinel string `all`, or ig `module_name` is a member of the parsed module token set."""
 
         # Returns 'True' immediately, when all modules are selected, avoiding a set membership check.
         if self.modules == "all":
@@ -122,8 +141,7 @@ class Scanner:
 
         self._print_banner()
 
-        ## Pre-Scan Authorisation Gate.
-        # Displays the target URL, and requires explicit operator confirmation, before any requests are sent.
+        # Pre-Scan Authorisation Gate. Displays the target URL, and requires explicit operator confirmation, before any requests are sent.
         print(f"  Target : {self.config.target_url}")
         print(
             "  WARNING: Only scan systems you have explicit written authorisation to test."
@@ -156,8 +174,7 @@ class Scanner:
         # Tracks which module tokens were actually executed, written into `ScanResult.modules_run`.
         modules_run = []
 
-        ## Authentication
-        # Authenticates all configured roles before any module runs. Aborts if no sessions are established.
+        # Authentication. Authenticates all configured roles before any module runs. Aborts if no sessions are established.
         logger.info("Step: Authentication.")
         try:
             # Calls `authenticate_all()`, which dispatches to the correct auth handler per role, based on config auth type.
@@ -166,7 +183,9 @@ class Scanner:
 
             # Treats all-failed authentication as a fatal error, because all the subsequent modules require at least one valid session.
             if not any(auth_results.values()):
-                logger.error("Authentication failed for all configured roles. Aborting scan.")
+                logger.error(
+                    "Authentication failed for all configured roles. Aborting scan."
+                )
                 sys.exit(1)
         except Exception:
             # Treats any unhandled exception during authentication as fatal, because all the modules depend on it.
@@ -176,8 +195,7 @@ class Scanner:
             )
             sys.exit(1)
 
-        ## Scope setup
-        # Fetches and parses `robots.txt`, to populate the scope enforcer's disallowed paths list.
+        # Scope Setup. Fetches and parses `robots.txt`, to populate the scope enforcer's disallowed paths list.
         logger.info("Step: Scope setup.")
 
         # Only fetches `robots.txt`, if the YAML configuration has `robots_txt: true` under the scope block.
@@ -192,8 +210,7 @@ class Scanner:
                     traceback.format_exc(),
                 )
 
-        ## Static crawl.
-        # Initialises endpoint, and form lists here, so that downstream modules always have defined containers - even if crawling is skipped.
+        # Static Crawl. Initialises endpoint, and form lists here, so that downstream modules always have defined containers - even if crawling is skipped.
         endpoints = []
         forms = []
 
@@ -239,9 +256,7 @@ class Scanner:
                     )
                 )
 
-        ## SPA Crawl
-        # Runs the Playwright SPA crawler against Juice Shop's Angular frontend, and merges any new endpoints.
-        # Gated on both the 'crawl' module token, and the `handle_spa` flag in `crawl_config`, defaulting to 'True'.
+        # SPA Crawl. Runs the PLaywright SPA crawler against JS's Angular frontend, and merges any newly discovered endpoints, when SPA handling is enabled.
         if self._should_run("crawl") and self.config.crawl_config.get(
             "handle_spa", True
         ):
@@ -287,8 +302,7 @@ class Scanner:
                     )
                 )
 
-        ## Parameter Enumeration.
-        # Initialises both of the outputs here, so that `idor` module steps always receive the defined values, even if `params` is skipped.
+        # Parameter Enumeration. Initialises both of the outputs here, so that `idor` module steps always receive the defined values, even if `params` is skipped.
         endpoint_params = {}
         parameters_found = 0
 
@@ -330,8 +344,7 @@ class Scanner:
                     )
                 )
 
-        ## Unauthenticated Access.
-        # Tests every discovered endpoint for unauthenticated access, and performs wordlist-driven, forced browsing.
+        # Unauthenticated Access. Tests every discovered endpoint for unauthenticated access, and performs wordlist-driven, forced browsing.
         if self._should_run("unauth"):
             logger.info("Step: Unauthenticated access and forced browsing.")
             modules_run.append("unauth")
@@ -371,8 +384,7 @@ class Scanner:
                     )
                 )
 
-        ## Session Testing.
-        # Groups the session termination, and session fixation, under the same 'session' token, to keep CLI flags simple.
+        # Session Testing. Groups the session termination, and session fixation, under the same 'session' token, to keep CLI flags simple.
         if self._should_run("session"):
             # Tests for logout invalidation for all the configured roles, and the JWT expiry fallback for Juice Shop.
             logger.info("Step: Session termination testing.")
@@ -443,8 +455,7 @@ class Scanner:
                     )
                 )
 
-        ## Horizontal Authorisation/IDOR
-        # Tests IDOR read/write, and enumeration across all user-specific endpoints, using cross-role ID substitution.
+        # Horizontal Authorisation/IDOR. Tests IDOR read/write, and enumeration across all user-specific endpoints, using cross-role ID substitution.
         if self._should_run("idor"):
             logger.info("Step: Horizontal authorisation and IDOR testing.")
             modules_run.append("idor")
@@ -481,8 +492,7 @@ class Scanner:
                     )
                 )
 
-        ## Vertical Authorisation.
-        # Tests vertical privilege escalation, by replaying admin-pattern endpoints under `user_a`, and unauthenticated sessions.
+        # Vertical AUthorisation. Tests vertical privilege escalation, by replaying admin-pattern endpoints under `user_a`, and unauthenticated sessions.
         if self._should_run("vertical"):
             logger.info("Step: Vertical authorisation testing.")
             modules_run.append("vertical")
@@ -519,8 +529,7 @@ class Scanner:
                     )
                 )
 
-        ## Workflow Bypass.
-        # Records configured workflows, then tests each for step-skip, out of order, cross-session, and unauthenticated replay bypass.
+        # Workflow Bypass. Records configured workflows, then tests each for step-skip, out of order, cross-session, and unauthenticated replay bypass.
         if self._should_run("workflow"):
             logger.info("Step: Workflow recording and bypass testing.")
             modules_run.append("workflow")
@@ -568,8 +577,7 @@ class Scanner:
                     )
                 )
 
-        ## Rate Limit Detection and Bypass.
-        # Checks authentication endpoints for rate limiting, then runs six bypass techniques against tested endpoints.
+        # Rate Limit Detection and Bypass. Checks authentication endpoints for rate limiting, then runs six bypass techniques against tested endpoints.
         if self._should_run("ratelimit"):
             logger.info("Step: Rate limit detection.")
             modules_run.append("ratelimit")
@@ -642,8 +650,7 @@ class Scanner:
                     )
                 )
 
-        ## Builds ScanResult
-        # Records the scan end time, after all modules have completed, or individually failed.
+        # Builds ScanResult. Records the scan end time, after all modules have completed, or individually failed.
         scan_end = datetime.datetime.now(datetime.UTC)
 
         # Calculates total elapsed seconds as a float, for the `ScanResult.scan_duration_seconds` field.
@@ -662,8 +669,7 @@ class Scanner:
             modules_run=modules_run,
         )
 
-        ## Report Generation.
-        # Defensive programming - creates the output directory if it does not already exist before writing the reports.
+        # Report Generation. Defensive programming - creates the output directory if it does not already exist before writing the reports.
         os.makedirs(self.output_dir, exist_ok=True)
 
         # Builds a timestamp string from the scan start time, to make each report filename unique per run.
@@ -690,8 +696,7 @@ class Scanner:
         except Exception:
             logger.error("JSON report generation failed.\n%s", traceback.format_exc())
 
-        ## Console Summary
-        # Defines the severity display order from most critical, to least, matching `docs/severity_rubric.md`.
+        # Console Summary. Defines the severity display order from most critical, to least, matching `docs/severity_rubric.md`.
         severity_order = ["Critical", "High", "Medium", "Low", "Info"]
         # Initialises a count dictionary, to keep track of how many findings fall into each respective severity tier.
         severity_counts = {}

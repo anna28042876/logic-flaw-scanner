@@ -55,10 +55,15 @@ class VerticalAuthTester:
         `discovered_by_roles` attribute contains only the admin role, or those listed explicitly under
         `known_admin_endpoints` in the scanner config. The static list covers endpoints that all crawl
         roles discover equally, such as `/api/Users` and `/api/Complaints` on Juice Shop, which would
-        otherwise be missed by the `discovered_by_roles` heuristic."""
+        otherwise be missed by the `discovered_by_roles` heuristic.
 
-        # Builds a set of (url, method) pairs from the config's known_admin_endpoints list for O(1) lookup.
-        # `getattr` with an empty list default handles configs that do not define this key, such as dvwa.yaml.
+        Args:
+            endpoints (list[Endpoint]): All discovered endpoints from the crawl phase.
+
+        Returns:
+            list[Endpoint]: Deduplicated (by method + base path) admin-only endpoints, that should be tested for vertical privilege escalation."""
+
+        # Builds a set of configured admin  endpoints for dast lookup, while safely handling configurations that do not define any known admin paths.
         known_admin_pairs = set()
         for entry in getattr(self.config, "known_admin_endpoints", []):
             known_url = entry.get("url", "").rstrip("/").lower()
@@ -88,11 +93,7 @@ class VerticalAuthTester:
                 admin_endpoints.append(endpoint)
                 logger.debug("Identified admin endpoint: %s", url)
 
-        # Issue 8: Deduplicate by stripping query strings. The crawler stores
-        # `security.php`, `security.php?phpids=on`, `security.php?phpids=off`, and
-        # `security.php?test=...` as distinct DVWA endpoints, all of which match the
-        # admin pattern via /security. Without deduplication every variant generates
-        # its own finding for the same underlying page.
+        # Removes querry strings before deduplication, so multiple parameter variants of the same admin page do not generate duplicate findings.
         seen_base_paths = set()
         deduped = []
         for ep in admin_endpoints:
@@ -114,7 +115,14 @@ class VerticalAuthTester:
         If no authenticated session exists for `user_role`, the user-vs-admin escalation test is
         skipped entirely. This prevents false positives on single-role targets such as DVWA, where
         only `admin` is configured and `user_a` falls back to an unauthenticated request that DVWA
-        (at Low security) accepts for every endpoint."""
+        (at Low security) accepts for every endpoint.
+
+        Args:
+            endpoint (Endpoint): THe admin-only endpoint to test.
+
+            admin_role (str): THe role whose response establiishes the 200 baseline, defaults to `admin`.
+
+            user_role (str): The lower-privilege role to test for escalation, defaults to `user_a`."""
 
         url = endpoint.url
         method = endpoint.method.upper()
@@ -152,9 +160,7 @@ class VerticalAuthTester:
             )
             return
 
-        # Only tests user-vs-admin escalation when a real authenticated session exists for `user_role`.
-        # Falling back to unauthenticated produces false positives on targets such as DVWA at Low security
-        # that accept every request without a session.
+        # Only performs privilege escalation testing, when a valid autenticated user session exists to avoid false positives, from publicly acessible targets.
         user_session = self.session_manager.sessions.get(user_role)
         if user_session:
             user_kwargs = self.session_manager.get_session_kwargs(user_role)
@@ -195,8 +201,7 @@ class VerticalAuthTester:
                 logger.warning(
                     "CRITICAL: Vertical privilege escalation confirmed at %s", url
                 )
-                # Tracks the URL so the unauthenticated access check below does not emit a
-                # second overlapping finding for the same endpoint in the same scan run.
+                # Tracks tested URLs, so that the unauthenticated access check does not produce duplicate findings for the same endpoint.
                 self._confirmed_endpoint_urls.add(url)
         else:
             logger.debug(
@@ -221,10 +226,7 @@ class VerticalAuthTester:
         if response_unauth is not None and self.comparator.is_access_granted(
             response_unauth
         ):
-            # Issue 4: Suppresses the unauthenticated access finding when a vertical privilege
-            # escalation finding was already emitted for this URL in the same scan run. Emitting
-            # both findings for the same endpoint produces a duplicate that cannot match the same
-            # ground truth entry, inflating the false positive count unnecessarily.
+            # Skips the unauthenticated access findings, for URLs that alrteady produced a privilege escalation finding to avoid duplicate results, for the smame endpoint.
             if url in self._confirmed_endpoint_urls:
                 logger.debug(
                     "Skipping unauthenticated access finding for %s — "
@@ -253,12 +255,16 @@ class VerticalAuthTester:
                 self.findings.append(vuln)
                 # Logs a warning identifying the confirmed unauthenticated admin endpoint by URL.
                 logger.warning(
-                    "CRITICAL: Unauthenticated access confirmed at admin endpoint %s", url
+                    "CRITICAL: Unauthenticated access confirmed at admin endpoint %s",
+                    url,
                 )
 
     def test_all_vertical(self, endpoints):
         """Calls `_identify_admin_endpoints` on the provided `endpoints` list, then runs `test_vertical_escalation` on every result,
-        accumulating all findings into `self.findings`."""
+        accumulating all findings into `self.findings`.
+
+        Args:
+            endpoints (list[Endpoint]): ALl discovered endpoints from the crawl phase."""
 
         admin_endpoints = self._identify_admin_endpoints(endpoints)
         logger.info(
@@ -270,5 +276,9 @@ class VerticalAuthTester:
             self.test_vertical_escalation(endpoint)
 
     def get_findings(self):
-        """Returns `self.findings` accumulated across all vertical escalation tests."""
+        """Returns `self.findings` accumulated across all vertical escalation tests.
+
+        Returns:
+            list[Vulnerability]: All `Critical` findings (`Vertical Privilege Escalation`, and `Unauthenticated Access to Admin ENdpoint`),
+            recorded during this module's test run."""
         return self.findings

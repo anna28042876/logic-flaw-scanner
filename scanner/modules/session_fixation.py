@@ -29,7 +29,10 @@ class SessionFixationTester:
 
     def _get_login_url(self):
         """Resolves the login endpoint URL from `config.login_config`. Prepends `config.target_url` if the stored value
-        is a relative path, returning a fully qualified URL string."""
+        is a relative path, returning a fully qualified URL string.
+
+        Returns:
+            str: The fully qualified login endpoint URL, from `config.login_config`."""
 
         raw = self.config.login_config.get("login_url", "")
         # Prepends the target base URL, when the login URL stored in `config` is a relative path.
@@ -39,7 +42,11 @@ class SessionFixationTester:
 
     def _get_session_cookie_name(self):
         """Sends a GET request to the target login page using a fresh `requests.Session`, and inspects the response cookies. Then returns
-        the name of the first recognised session cookie, or NOne, if no known session cookie is present on the target."""
+        the name of the first recognised session cookie, or NOne, if no known session cookie is present on the target.
+
+        Returns:
+            str or None: THe anem of the first recognised session cookie found e.g., `PHPSESSIF`, `JSESSIONIID`, or `NOne` if no known session cookie is present,
+            which is the case for JS's JWT-based auth."""
 
         known_names = [
             "PHPSESSID",
@@ -84,7 +91,15 @@ class SessionFixationTester:
     def _authenticate_fresh(self, role="user_a"):
         """Performs a direct POST to the login endpoint using the credentials from `config` for the specified role. Then tries
         JSON and form-encoded formats. Then returns the raw JWT string, if found in the response body or headers, or None if
-        authentication fails."""
+        authentication fails.
+
+        Args:
+            role (str): The role name, whose credentials are used for the fresh login attempt, defaults to `user_a`.
+
+        Returns:
+            str or NOne: The raw JWT string if authentication succeeded, and a token was found, or `None` if authentication failed, or no
+            token could be extrtacted."""
+
         login_url = self._get_login_url()
         # Finds the matching credential dict from the credentials list by role field.
         role_credentials = next(
@@ -338,5 +353,9 @@ class SessionFixationTester:
             )
 
     def get_findings(self):
-        # Returns the complete list of `Vulnerability` objects,, recorded during the session fixation testing.
+        """Returns the complete list of `VUlnerability` objectsm recorded during session fization testing.
+
+        Returns:
+            list[Vulnerability]: All `High` (Session Fixation), and `Medium` (JWT Token Reuse) findings accumulated during
+            thius module's test run."""
         return self.findings

@@ -1,4 +1,6 @@
 """
+`crawler.py`
+
 Implements a BFS-based crawler that maps the attack surface of the target application (OWASP JS/DVWA) before
 vulnerability probes are deployed. Discovers reachable HTML pages, form submission endpoints, and REST API
 paths, via parsing link tags, inline scripts, link headers, and JSON responses.
@@ -36,6 +38,17 @@ class Crawler:
         session_manager: SessionManager,
         scope_enforcer: ScopeEnforcer,
     ):
+        """Stores all 4 injected pipeline dependencies, and initialises the 3 shared data structures used across crawl methods.
+
+        Args:
+            config (ScanConfig): Scanner config providing crawl limits, target URL, and scope settings.
+
+            http_client (HTTPClient): Shared HTTP client for sending all crawl requests.
+
+            session_manager (SessionManager:) Provides per-role session kwargs, for authenticated crawl passes.
+
+            scope_enforcer(ScopeENforcer): Gates every discovered URL against the configured target host, and path prefix rules."""
+
         self.config = config
         self.http_client = http_client
         self.session_manager = session_manager
@@ -51,7 +64,11 @@ class Crawler:
     def _extract_links(self, html: str, base_url: str) -> list[str]:
         """Parses an HTML page with BeautifulSoup and returns every URL found across anchor, link, scrippt, image,
         and iframe tags. All relative paths are resolved to absolute URLs against `bare_url` so every entry entering the
-        BFS queue is ready for `ScopeEnforcer checking`."""
+        BFS queue is ready for `ScopeEnforcer checking`.
+
+        Args:
+            html (str): The raw HTML response body to parse.
+            base_url (str): The absolute URL of the page being parsed, used as the base for resolving relative hrefs, and srcs."""
         soup = BeautifulSoup(html, "lxml")
         # Coverns anchors, stylesheets, scripts, images, and embedded frames.
         tag_attr_pairs = [
@@ -74,7 +91,17 @@ class Crawler:
     def _extract_forms(self, html: str, page_url: str) -> list[dict]:
         """Finds every <form> element on a page and returns it action URL, HTTP method, encoding type, and named fields as
         a dictionary. Action URLs are reesolved to absolute paths. The returned list feeds self.forms, which is then later
-        cvonsumed by the auth-workflow and form-injection modules."""
+        cvonsumed by the auth-workflow and form-injection modules.
+
+        Args:
+            html (Str): The raw HTML response body to parse.
+
+            page_url (str): Th absolute URL o the page, used to resolve relative form action apths.
+
+        Returns
+            list[dict]: 1 dict per form, each contaaining `action`, `method`, `enctype`, `fields` (list of `{'name', 'type', 'value'}` dicts)
+            , and `source_page`."""
+
         soup = BeautifulSoup(html, "lxml")
         forms = []
         # Iterates all forms, and for each, collects named fields with their field type and default value.
@@ -110,11 +137,11 @@ class Crawler:
             )
         return forms
 
-    """ Mines four sources (inline script literals, raw HTML URLs RFC 5988 Link headers, and `data-url`/`data-api-endpoint` attributes)
-    for REST API paths not reachable via the standard anchor tags. Results are deduplicated, filtered to remove static assets, and checked 
-    against `ScopeENforcer` before being returned. Primarily targets Juicee Shops Angular routes and DVWA widgets."""
-
     def _extract_api_hints(self, html: str, response_headers: dict) -> list[str]:
+        """Mines four sources (inline script literals, raw HTML URLs RFC 5988 Link headers, and `data-url`/`data-api-endpoint` attributes)
+        for REST API paths not reachable via the standard anchor tags. Results are deduplicated, filtered to remove static assets, and checked
+        against `ScopeENforcer` before being returned. Primarily targets Juicee Shops Angular routes and DVWA widgets."""
+
         soup = BeautifulSoup(html, "lxml")
         # Excludes static asset paths with carry no auth-surface, prior to deduplication.
         false_positives = re.compile(
@@ -167,11 +194,23 @@ class Crawler:
                 seen.add(absolute)
         return filtered
 
-    def _mine_linked_js(self, html: str, base_url: str, session_kwargs: dict) -> list[str]:
+    def _mine_linked_js(
+        self, html: str, base_url: str, session_kwargs: dict
+    ) -> list[str]:
         """Finds every linked `<script src>` on the target domain in `html`, fetches each bundle
         that has not already been visited, and extracts path-like string literals from the raw JS
         source. Returns deduplicated absolute URLs that pass `ScopeEnforcer`, so that API routes
-        embedded in SPA bundles reach the BFS queue without relaxing the configured scope."""
+        embedded in SPA bundles reach the BFS queue without relaxing the configured scope.
+
+        Args:
+            html (str): The raw HTML response body, whose script tags are scanned.
+
+            base_url (str): The asbolute URL of the pge, used to resolve relative script src attributes.
+
+            session_kwargs (dict): Session credentials forwarded to `http_client.get`, for fetching JS bundles.
+
+        Returns:
+            list[str]: Deduplicated absolute URLs extracted from JS bundle source code, that pass `ScopeEnforcer.is_in_scope`."""
 
         soup = BeautifulSoup(html, "lxml")
         target_netloc = urlparse(self.config.target_url).netloc
@@ -206,22 +245,22 @@ class Crawler:
                         continue
                     absolute = urljoin(self.config.target_url, match)
                     # Scope-checks each extracted path before adding it to the results.
-                    if absolute not in seen and self.scope_enforcer.is_in_scope(absolute):
+                    if absolute not in seen and self.scope_enforcer.is_in_scope(
+                        absolute
+                    ):
                         hints.append(absolute)
                         seen.add(absolute)
             except Exception as exc:
-                self.logger.debug(
-                    f"Failed to mine JS bundle {script_url}: {exc}"
-                )
+                self.logger.debug(f"Failed to mine JS bundle {script_url}: {exc}")
         return hints
-
-    """ Executes a single BFS crawl session from `start_url` using credentials for the given `role` ('none' means unauthenticated).
-    Fetches each page via `HTTPClient`, branches on Content-Type to handle HTML and JSON responses differently, and registers every 
-    discovered URL/method pair as an `Endpoint`. Respects `max_depth`, and `max_pages` limits from `crawl_config`."""
 
     def crawl(
         self, start_url: str = None, max_depth: int = None, role: str = None
     ) -> None:
+        """Executes a single BFS crawl session from `start_url` using credentials for the given `role` ('none' means unauthenticated).
+        Fetches each page via `HTTPClient`, branches on Content-Type to handle HTML and JSON responses differently, and registers every
+        discovered URL/method pair as an `Endpoint`. Respects `max_depth`, and `max_pages` limits from `crawl_config`."""
+
         if start_url is None:
             start_url = self.config.target_url
         if max_depth is None:
@@ -306,11 +345,17 @@ class Crawler:
                     f"found {len(self.discovered_endpoints)} endpoints so far."
                 )
 
-    """ Recursively walks a parsed JSON value and collects strings starting with '/' or 'http' as potential URL paths. 
-    Depth is capped at 10 to prevent stack exhaustion  or deeply nested Juice Shop API responses such as `/rest/products` 
-    pagination data."""
-
     def _extract_json_urls(self, data, _depth: int = 0) -> list[str]:
+        """Recursively walks a parsed JSON value and collects strings starting with '/' or 'http' as potential URL paths.
+        Depth is capped at 10 to prevent stack exhaustion  or deeply nested Juice Shop API responses such as `/rest/products`
+        pagination data.
+
+        Args:
+            data (dict, list, or str): The parsed JSON value to inspect.
+            _depth (int): Current recursion depth, capped at 10, to prevent stack exhaustion on deeply nestedd JS API responses.
+
+        Returns:
+            list[str]: All string values, starting with `/`,  or `http` found anywhere in the JSON structure up to depth 10."""
         if _depth > 10:
             # Caps recursion to prevent stack exhaustion on deeply nested Juice API responses.
             return []
@@ -329,11 +374,18 @@ class Crawler:
                 urls.append(data)
         return urls
 
-    """ Registers a URL and HTTP method as an `Endpoint` in `discovered_endpoints`, deduplicating by (method, url) 
-    pairs so that the same route is never added twice. This prevents duplicate probing across the unauthenticated 
-    and role-based crawl sessions that `crawl_all_sessions` manages."""
-
     def _add_endpoint(self, url: str, method: str, role: str = None) -> None:
+        """Registers a URL and HTTP method as an `Endpoint` in `discovered_endpoints`, deduplicating by (method, url)
+        pairs so that the same route is never added twice. This prevents duplicate probing across the unauthenticated
+        and role-based crawl sessions that `crawl_all_sessions` manages.
+
+        Args:
+            url (str): The absolute URL of the endpoint to register.
+
+            method (str): The HTTP method, e.g., `GET`, `POST`.
+
+            role (str, optiuonal): The role under which this endpoint was discoverred. Not stored on the endpoint, used only for logging."""
+
         key = (method.upper(), url)
         for ep in self.discovered_endpoints:
             if (ep.method.upper(), ep.url) == key:
@@ -341,12 +393,15 @@ class Crawler:
                 return
         self.discovered_endpoints.append(Endpoint(url=url, method=method.upper()))
 
-    """ Runs a full multi-session discovery pass. One unauthenticated crawl, followed by one crawl per configured role 
-    (e.g., 'user', 'admin' for Juice Shop). COmpares `discovered_endpoints` sets between passes using set diffs to 
-    determine which URLs were gated behind authentication, then sets `required_auth` on those `Endpoints`, marking them 
-    as primary IDOR/BOLA targets."""
-
     def crawl_all_sessions(self) -> None:
+        """Runs a full multi-session discovery pass. One unauthenticated crawl, followed by one crawl per configured role
+        (e.g., 'user', 'admin' for Juice Shop). COmpares `discovered_endpoints` sets between passes using set diffs to
+        determine which URLs were gated behind authentication, then sets `required_auth` on those `Endpoints`, marking them
+        as primary IDOR/BOLA targets.
+
+        Raises:
+            No exception is raised, all HTTP failures are handled by `HTTPClient`, and logged at `WARNING` level, with thw crawl continuing to the next URL."""
+
         # Pulls all the configured role names e.g., 'user', 'admin', from `SessionManager`.
         roles = (
             list(self.session_manager.sessions.keys())
@@ -393,8 +448,16 @@ class Crawler:
 
     # Returns the full list of discovered `Endpoint` objects for the IDOR, auth-bypass, and rate-limit probe modules.
     def get_endpoints(self) -> list[Endpoint]:
+        """Returns the full list of `Endpoint` objects, discovered across all crawl sessions.
+
+        Returns:
+            list[Endpoint]: All deduplicted endpoints found during unauthenticated, and role-authenticated crawl passes."""
         return self.discovered_endpoints
 
     # Returns raw form metadata collected across all crawled pages for the auth-workflow and form-injection modules.
     def get_forms(self) -> list[dict]:
+        """Returns the raw form metadata, collected across all crawled pages.
+
+        Returns:
+            list[dict]: All form dicts extracted by `_extract_forms` across every page visited during all crawl sessions."""
         return self.forms

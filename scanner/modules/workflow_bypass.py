@@ -34,27 +34,21 @@ class WorkflowBypassTester:
         self.comparator = comparator
         # COnsolidates all the confirmed bypass findings as `VUlnerability` objects.
         self.findings = []
-    
-    def __init__(
-        self, config, http_client, session_manager, workflow_recorder, comparator
-    ):
-        """Stores `config`, `http_client`, `session_manager`, `workflow_recorder`, and `comparator`.
-        Initialises `self.findings` as an empty list, ready to accumulate bypass findings."""
-
-        self.config = config
-        self.http_client = http_client
-        self.session_manager = session_manager
-        self.workflow_recorder = workflow_recorder
-        self.comparator = comparator
-        # COnsolidates all the confirmed bypass findings as `VUlnerability` objects.
-        self.findings = []
         # Seeds the random number generator with the fixed seed from `config` for reproducibility.
         random.seed(config.random_seed)
 
     def _replay_step(self, step, session_kwargs=None):
         """Replays a single recorded step dictionary using `session_kwargs` when called from cross-session,
         or authenticated replay tests, or with no credentials when called from `test_replay_unauthenticated`.
-        Returns the HTTP response, or None if the request raises an exception."""
+        Returns the HTTP response, or None if the request raises an exception.
+
+        Args:
+            step (dict): A recorded step dict containing `url`, `method`, and optionally `body`, as stored by `WorkflowRecorder.record_workflow`.
+
+            session_kwargs (dict, optional): Session credentials to attach to the request. Passs `None`, or omit for an unauthenticated replay.
+
+        Returns:
+            requests.Response or None: The HTTP response, or `None`, if the request raises an exception."""
 
         url = step["url"]
         method = step.get("method", "GET").upper()
@@ -73,7 +67,14 @@ class WorkflowBypassTester:
 
     def _final_step_succeeded(self, response):
         """Returns 'True' if `response` indicates the final workflow step was completed successfully,
-        meaning a 200 status is returned, and access is granted."""
+        meaning a 200 status is returned, and access is granted.
+
+        Args:
+            response (request.Response or NOne): THe response from replaying the final workflow step.
+
+        Returns:
+            bool: `True`, if the response has status 200, and `ResponseCOmparator` classifies it as access granted. `False`,
+            if the response is `None`, or access was denied."""
 
         # Returns 'False' immediately when the response is None, due to a request exection.
         if response is None:
@@ -85,7 +86,10 @@ class WorkflowBypassTester:
     def test_skip_steps(self, workflow_name):
         """Retrieves the named workflow from `WorkflowRecorder`, and runs two skip tests, including jumping from step
         one directly to the final step, then individually skipping each middle step. Flags a High `Vulnerability` for each
-        successful bypass."""
+        successful bypass.
+
+        Args"
+            workflow_name (str): THe name of a recorded workflow, in `self.workflow_recorder.recorded_workflows`."""
 
         workflow = self.workflow_recorder.recorded_workflows.get(workflow_name)
         # Skips testing if the workflow name is not present in `self.recorded_workflows`.
@@ -138,8 +142,7 @@ class WorkflowBypassTester:
                 "HIGH: Workflow skip-all bypass confirmed for `%s`.", workflow_name
             )
 
-        # Test 2. Iterates each middle step individually, to identify which specific steps the server fails to enforce.
-        # Rather than just whether any can be skipped.
+        # Test 2. Iterates each middle step individually, to identify which specific steps the server fails to enforce. Rather than just whether any can be skipped.
         for i, skipped_step in enumerate(middle_steps):
             # Builds the reduced sequence by excluding on the current middle step at index i.
             sequence = (
@@ -182,7 +185,10 @@ class WorkflowBypassTester:
     def test_out_of_order(self, workflow_name):
         """Retrieves the named workflow, and generates step permutations. For workflows with 4, or fewer, steps, all permutations are tested.
         For 5, or more, steps, a targeted stretegy is used where the final step is moved earlier, the first step moved later, and the full reversal.
-        It flags a `High` `VUlnerability` for any permutation where the final action succeeds."""
+        It flags a `High` `VUlnerability` for any permutation where the final action succeeds.
+
+        Args:
+            workflow_name (str): THe name of a recordd workflow, in `self.workflow_recorder.recorded_workflows`."""
 
         workflow = self.workflow_recorder.recorded_workflows.get(workflow_name)
         # Skips testing if the workflow name is not present in `self.recorded_workflows`.
@@ -274,7 +280,10 @@ class WorkflowBypassTester:
 
     def test_replay_cross_session(self, workflow_name):
         """Replays the final step of the named workflow, using `user_bs`'s session, instead of the original role.
-        Flags a 'High' `Vulnerability`, if the final step succeeds under the alternate session."""
+        Flags a 'High' `Vulnerability`, if the final step succeeds under the alternate session.
+
+        Args:
+            workfow_name (str): The name of a recorded workflow, `self.workflow_recorder.recorded_workflows`."""
 
         workflow = self.workflow_recorder.recorded_workflows.get(workflow_name)
         # SKips testing if the workflow name is not present in `self.recorded_workflows`.
@@ -447,5 +456,8 @@ class WorkflowBypassTester:
         self.test_2fa_bypass()
 
     def get_findings(self):
-        """Returns `self.findings` accumuilated across all workflow bypass tests."""
+        """Returns `self.findings` accumuilated across all workflow bypass tests.
+
+        Returns:
+            list[Vulnerabiliity]: All `High` (step skip, out-of-order, cross session), and `Critical` (unauthenticated replay, 2FA skip) findings recorded during this module's test run."""
         return self.findings

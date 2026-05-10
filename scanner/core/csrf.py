@@ -22,7 +22,13 @@ class CSRFExtractor:
     def extract_from_html(html_body):
         """PArses `html_body` with `BeautifulSoup`, and searches for CSRF tokens in hidden input fields, and meta tags.
         Returns a dictionary mapping each discovered field name to its token value, or an empty dictionary if no CSRF
-        tokens are found."""
+        tokens are found.
+
+        Args:
+            html_body (str): The raw HTML respnose body to parse.
+
+        Returns:
+            dict: A mapping of `{field_name: token_value}` for every CSRF toekn found. Returns an empty dict if no tokens are present, or if parsing fails."""
 
         tokens = {}
         known_field_names = [
@@ -67,7 +73,13 @@ class CSRFExtractor:
     @staticmethod
     def extract_from_cookies(cookies_dict):
         """Searches `cookies_dict` for CSRF-related cookie names used byh Juice Shop and DVWA. Returns the token string if a
-        recognised CSRF cookie is found, or None otherwise."""
+        recognised CSRF cookie is found, or None otherwise.
+
+        Args:
+            cookies_dict (dict): A mapping of cookie name, to cookie vvalue, as returned by `response.cookies`, or `session.cookies`.
+
+        Returns:
+            str or NOne: The value of the first recognised CSRF cookie found, or `None`, if no known CSRF cookie is present."""
 
         csrf_cookie_names = ["XSRF-TOKEN", "csrf_token"]
 
@@ -83,7 +95,13 @@ class CSRFExtractor:
     @staticmethod
     def extract_from_headers(response_headers):
         """Searches `response_headers` for CSRF-related header names. Returns the token string if a recognised CSRF header is
-        found, or None otherwise."""
+        found, or None otherwise.
+
+        Args:
+            response_header (dict): The response headers dict, typically `dict(response.headers)`.
+
+        Returns:
+            str or None: THe value of the first recognised CSRF header found, or `None` if no known CSRF header is present."""
 
         csrf_header_names = ["X-CSRF-Token", "X-XSRF-Token"]
 
@@ -99,7 +117,18 @@ class CSRFExtractor:
     def get_csrf_for_request(self, http_client, url, session_kwargs):
         """GETs `url` via `http_client`, then calls all three extract methods against the response. Returns a dict describing
         the best token found, and its placement, with keys `token`, `placement`, and `field_name`. Returns None if no token is
-        found."""
+        found.
+
+        Args:
+            http_client (HTTPClient): The shared HTTP client, for sendind thw `GET` request.
+
+            url (str): The page URL, from which to extract a CSRF toekn.
+
+            session_kwargs (dict): Session credentials to uise for the `GET` request.
+
+        Returns:
+            dict or NOne: A dict with keys `token`, `placement`, and `field_name`, describing where the token was found, its value,
+            or `NOne` if no CSRF token could be found, or the `GET` request failed."""
 
         # Skips the fetch, and returns None if no URL is provided.
         if not url:

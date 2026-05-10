@@ -28,7 +28,12 @@ class HTMLReportGenerator:
 
     def __init__(self, scan_result, evidence_store):
         """ Stores the `ScanResult` instance, and the `evidence_Store` dictionary, produced by `EvidenceCollector`. 
-        Both are passed directly into the Jinja2 render scope, by `generate`."""
+        Both are passed directly into the Jinja2 render scope, by `generate`.
+        
+        Args:
+            scan_results (ScanResult): The completed scan result dataclass containing all discovered vulnerabilities, endpoints, and scan timing metadata.
+            
+            evidence_store (EvidenceCOllector): The evidence collector whose `get_all_evidence()` method is called to populate the reports collapsible evidence panels."""
 
         # `scan_result` holds all the discovered endpoints, vulnerabilities, and scan metadata.
         self.scan_result = scan_result
@@ -37,7 +42,10 @@ class HTMLReportGenerator:
 
     def _compute_severity_counts(self):
         """ COunts `VUlnerability` objects in `scan_result.vulnerabilities`, which are grouped by severity string. 
-        Then returns a dictionary keyed by each level  in `SEVERITY_LEVELS`, with integer counts, defaulting to zero."""
+        Then returns a dictionary keyed by each level  in `SEVERITY_LEVELS`, with integer counts, defaulting to zero.
+        
+        REturns:
+            dict: A mapping of `{severity_level: count}`, for each level in `SEVERITY_LEVELS` (`Critical`, `High`, `Medium`, `Low`, `Info`), with `0` as the default for levels that have no findings."""
         
         # Initalises all five severity levels to zero, so that missing levels still appear in the bar chart.
         counts = {level: 0 for level in self.SEVERITY_LEVELS}
@@ -53,7 +61,15 @@ class HTMLReportGenerator:
     def generate(self, output_path):
         """ Renders `report.html`, with `scan_result`, `severity_counts`, `evidence_store`, and `scanner_version`, then 
         writes the result to `output_path`. Creates the parent directories, if they do not exist, and logs the absolute output
-        path upon success."""
+        path upon success.
+        
+        Args:
+            output_path (str): Path where the HTML report file should be written e.g., `reports/report_20260508_120000.html`
+            
+        Raises:
+            jinja2.TemplateNotFound: If `report.html` cant be vound in `scanner/templates/`.
+            
+            OSError: If the output file cant be written due to permission, or a missing parent directory that `os.makedirs` couldnt create."""
 
         # Resolves the absolute path to `scanner/templates/`, regardless of the working directory.
         templates_dir = os.path.join(

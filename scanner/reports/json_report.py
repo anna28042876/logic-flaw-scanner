@@ -25,7 +25,12 @@ class JSONReportGenerator:
 
     def __init__(self, scan_result, evidence_store):
         """Stores the `ScanResult` instance, and the `evidence_store` dictionary, produced by `EvidenceCollector`. Both are serialised
-        into the output JSON, by `generate`."""
+        into the output JSON, by `generate`.
+        
+        Args: 
+            scan_result (ScanResult): The completed scan result dataclass containing all discovered vulnerabilities, endpoints, and scan timing metadata.
+            
+            evidence_store (EvidenceCollector): THe evidence collector whose `get_all_evidence()` method is called to build on the evidence block."""
 
         # `scan_result` holds all the discovered endpoints, vulnerabilities, and scan-timing metadata.
         self.scan_result = scan_result
@@ -34,7 +39,11 @@ class JSONReportGenerator:
 
     def _build_metadata(self):
         """Builds the top-level metadata block, for the JSON report. Includes the target URL, scan start, and end times, duration,
-        request count, endpoint count, parameter count, and scanner version."""
+        request count, endpoint count, parameter count, and scanner version.
+        
+        Returns:
+            dict: A dict containing `scanner_version`, `scan_id`, `target_url`, `scan_start`, `scan_end`, `duration_seconds`, `total_endpoints`, `total_parameters`, 
+            `total_requests`, and `total_findings`."""
 
         return {
             "scanner_version": self.SCANNER_VERSION,
@@ -56,7 +65,10 @@ class JSONReportGenerator:
 
     def _build_findings(self):
         """Converts every `Vulnerability` in `scan_result.vulnerabilities`, into a plain dictionary using `to_dict`. It returns a list
-        of these dictionaries, ordered by the original finding sequence."""
+        of these dictionaries, ordered by the original finding sequence.
+        
+        Returns: 
+            list[dict]: 1 serialisable dict per `Vulnerability`, in the order findings werer accumulated durting the scan."""
 
         # Initialises an empty list that will hold one dictionary per `Vulnerability`, in insertion order.
         findings = []
@@ -70,7 +82,11 @@ class JSONReportGenerator:
 
     def _build_evidence(self):
         """Converts the `evidence_store` into a JSON-serialisable form. Returns a dictionary keyed by evidence ID, with each
-        value being the corresponding evidence dictionary, from `EvidenceCollector`."""
+        value being the corresponding evidence dictionary, from `EvidenceCollector`.
+        
+        Returns:
+            dict: A mapping of `{evidence_id: evidence_dict}` for every entry in the `EvidenceCOllector` store, where each evidence_id is the 
+            16-charactrer SHA256-derived assigned by `add_evidence`."""
 
         # Initialises an empty dictionary, that will mirror the structure of `evidence_store`.
         evidence = {}
@@ -84,7 +100,13 @@ class JSONReportGenerator:
     def generate(self, output_path):
         """Builds the full report dictionary from `metadata`, `findings`, and `evidence` blocks, then writes it to `output_path` as indented JSON.
         Uses `default=str` to safely serialise datetime objects. Creates parent directories if they are absent, and logs the absolute output path
-        upon success."""
+        upon success.
+        
+        Args:
+            output_path (str): PAth where the JSON report file should be written, e.g., `reports/report_20260508_120000.json`.
+            
+        Raises:
+            OSError: If the output file cant be written due to permissions, or a missing paarent directory that `os.makedirs` couldnt correct."""
 
         # Composes the three top-level blocks into the final report dictionary.
         report_data = {

@@ -1,7 +1,13 @@
-# `scanner/core/logger.py`.
-# Sets up logging for the whole scanner and every module pulls from this.
-# Two outputs: a timestamped file (gets everything) and the console (INFO+ only, coloured).
-# Keeping them separate allows for debugging of the log file without the terminal getting spammed with DEBUG noise mid-scan.
+"""
+`logger.py`
+
+Sets up the scanners logging system thats used across the entire project. THe module provides two main, public, helper functions:
+    `setup_logger`, which is called once from `main.py` when a scan begins to create the root `scanner` logger, with both a timestamped
+    file, and a colour-coded console output.
+    `get_logger`, which allows individual modules to create their own named child loggers, whilst still using the same shared logging
+    configuration, and avoiding duplicate log entries.
+"""
+
 import logging
 import os
 import time
@@ -9,13 +15,12 @@ from datetime import datetime
 
 from colorama import Fore, Style, init as colorama_init
 
-# Without this, `ANSI` colour codes print as raw escape characters on Windows.
-# `autoreset=True` means that the colour does not have to be manually reset after each line.
+# Enables ANSI colour support on the Windows terminal, so coloured output displays correctly. The autorest option automatically resets the terminal colour, aftrer each log message.
 colorama_init(autoreset=True)
 
 
 class ColouredFormatter(logging.Formatter):
-    # Maps each log level to a colour so that warnings can be spotted easily in the terminal without having to read the level label every time.
+    # Maps each logging level with a specific colour, so that important messages can be easily identified during a scan.
     LEVEL_COLOURS = {
         logging.DEBUG: Fore.CYAN,
         logging.INFO: Fore.GREEN,
@@ -25,7 +30,7 @@ class ColouredFormatter(logging.Formatter):
     }
 
     def format(self, record: logging.LogRecord) -> str:
-        # Grab the colour for this level, fall back to no colour if unrecognised.
+        # Retrieves the colour for the current log level, and if no colour exists then it defaults back to displaying the message normally.
         colour = self.LEVEL_COLOURS.get(record.levelno, "")
         message = super().format(record)
         return f"{colour}{message}{Style.RESET_ALL}"
@@ -36,17 +41,16 @@ def setup_logger(
     log_dir: str = "logs/",
     level: int = logging.DEBUG,
 ) -> logging.Logger:
-    # Called once at startup from `main.py`. Everything else uses `get_logger()` from below.
+    # Called once at startup from `main.py`. Everything else accesses the logger through `get_logger()` from below.
 
-    # Create `logs/` if it doesn't exist yet - this will happen on the first ever run.
+    # Creates the log directory, if it doesn't already exist, on the first run of the scanner.
     os.makedirs(log_dir, exist_ok=True)
 
-    # Each scan gets its own log file to allow for run comparison without overwriting.
-    # Format: `scan_2026-03-14_10-30-00.log`.
+    # Creates a unique log file for each individual scan, in the format scan_2026-03-14_10-30-00.log`, to preserve previous svan runs, and allow for later comparison.
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_filename = os.path.join(log_dir, f"scan_{timestamp}.log")
 
-    # File handler logs everything including DEBUG - useful for tracing exactly what requests were sent and what came back.
+    # FIle handler records all the log messages, including te debug output. Makes it possible to trace requests, responses, and behavour during a san analysis.
     file_handler = logging.FileHandler(log_filename, encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
     file_formatter = logging.Formatter(
@@ -54,7 +58,7 @@ def setup_logger(
     )
     file_handler.setFormatter(file_formatter)
 
-    # Console handler only shows `INFO` and above, preventing every `HTTP` request from cluttering the terminal during a scan.
+    # The consale handler only shows `INFO` and above, preventing every `HTTP` request from cluttering up tghe terminal during a scan.
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_formatter = ColouredFormatter(
@@ -62,10 +66,9 @@ def setup_logger(
     )
     console_handler.setFormatter(console_formatter)
 
-    # Force both handlers to log timestamps in UTC so that file and console timestamps
-    # match the banner and duration calculations (which use datetime.UTC). Without this,
-    # %(asctime)s renders in the VM's local time and looks 4 hours adrift from the UTC
-    # banner — arithmetically correct, but visually confusing during scan review.
+    """ COnfigures both handlers to uce UTC timestamps, so the console output, log files, and san duration calculations all remain consistent. Without this, 
+    timestamps may appear offset depending on the local timezone config, of the execution env."""
+
     file_handler.formatter.converter = time.gmtime
     console_handler.formatter.converter = time.gmtime
 
@@ -74,13 +77,13 @@ def setup_logger(
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
     logger.propagate = False
-    # `propagate=False` stops records from travelling to the root logger. Without this, every message would print twice.
+    # `propagate=False` prevents the log records from being passed to the root logger. WIthout this, every log message would appear twice in the console, and log file.
 
     return logger
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Every sub-module (crawler, auth checker, IDOR tester, etc.,) calls this rather than a `setup_logger()`, so they all
-    feed into the same handler chain that was setup at startup. Passing `__name__` gives each module its own label in the log
-    output, making tracing issues far easier."""
+    """Used by all the scanner modules e.g., the craler, authentication checks, and IDOR testing components. Each module retreves its own named logger, rather than
+    creating a new logging configuration. PAssing `__name__` ensures that log entries are clearly labelled, making debugging and tracing execution behaviour easier."""
+
     return logging.getLogger(name)
