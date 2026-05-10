@@ -8,3 +8,5 @@ logs/
 .vscode/
 credentials.txt
 pyrightconfig.json
+os
+yaml
