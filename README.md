@@ -7,7 +7,6 @@ Python-based semi-automated web vulnerability scanner, targeting logic and autho
     • Rate-Limiting Failures,
     • Workflow Bypasses.
 
-
 ## Description:
 This scanner embeds human pentester reasoning for logic-based web flaws into a reproducible, semi-automated Python tool.
 Unlike general-purpose scanners e.g., ZAP, it performs authenticated multi-role testing, stateful workflow replay, and 
