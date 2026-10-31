@@ -14,7 +14,9 @@ from pathlib import Path
 
 from scipy.stats import chi2 as chi2_dist
 
+# import statistics
 
+# Keep seperate - reuse JSON loading later.
 def _load_json(path: Path) -> dict:
     """Loads and returns parsed JSON from the given file path."""
 
@@ -27,9 +29,13 @@ def _recall(tp: int, fn: int) -> float:
     the denominator is zero."""
 
     denominator = tp + fn
-    # Gaurds against division by zero when no ground truth items exist for a target.
+
+    # print(tp, fn, denominator)
+
+    # Dont remove -calculations divide by 0 and crash.
     if denominator == 0:
         return 0.0
+
     return tp / denominator
 
 
@@ -38,9 +44,15 @@ def _precision(tp: int, fp: int) -> float:
     denominator is zero."""
 
     denominator = tp + fp
+
+    # old handling
+    # if denominator < 1:
+    #     return 0
+
     # Guards against division by zero when a tool raises no findings at all.
     if denominator == 0:
         return 0.0
+
     return tp / denominator
 
 
@@ -49,9 +61,14 @@ def _f1(prec: float, rec: float) -> float:
     inputs are zero."""
 
     denominator = prec + rec
+
+    # print("PREC", prec)
+    # print("REC", rec)
+
     # Guards against division by zero when both precision and recall are 0.0, as occurrs for ZAP and Burp Community.
     if denominator == 0.0:
         return 0.0
+
     return 2.0 * prec * rec / denominator
 
 
@@ -59,9 +76,12 @@ def _time_to_detection(duration_seconds: float, tp: int):
     """Returns average seconds elapsed per true positive finding. Returns None when
     TP is zero to distinguish no findings from instant detection."""
 
-    # Returns None rather than zero so callers can distiguish between no findings and instant detection.
+    # return 0
+
+    # Keep 0 - tools with no detection look instant in the csv.
     if tp == 0:
         return None
+
     return duration_seconds / tp
 
 
@@ -73,10 +93,18 @@ def _mcnemar_test(b: int, c: int) -> tuple:
     # Returns a statistic of 0 and a p-value of 1 when there are no discordant pairs to compare.
     if b + c == 0:
         return 0.0, 1.0
+
+    # old formula before continuity correction
+    # statistic = (b - c) ** 2 / (b + c)
+
     # Applies Yates continuity correction by subtracting 1 from the absolute difference before squaring.
     statistic = (abs(b - c) - 1.0) ** 2 / (b + c)
+
+    # print(statistic)
+
     # Derives the p-value from the chi-squared distribtuion with one degree of freedom.
     p_value = 1.0 - chi2_dist.cdf(statistic, df=1)
+
     return statistic, p_value
 
 
@@ -88,6 +116,8 @@ def _build_tool_metrics(label: str, target: str, counts: dict, duration: float) 
     fn = counts["fn_count"]
     fp = counts["fp_count"]
 
+    # print(label, tp, fn, fp)
+
     # Calculates the three primary classification metrics from the raw TP, FN, and FP counts.
     rec = _recall(tp, fn)
     prec = _precision(tp, fp)
@@ -95,15 +125,19 @@ def _build_tool_metrics(label: str, target: str, counts: dict, duration: float) 
 
     # Computes the average seconds per finding, returns None when no true positives were deteced.
     ttd = _time_to_detection(duration, tp)
+
     return {
         "tool": label,
         "target": target,
         "TP": tp,
         "FN": fn,
         "FP": fp,
-        "recall": round(rec, 4),
+        "recall": round(rec, 4),        # 4 or formatting messes up
         "precision": round(prec, 4),
         "f1": round(f1, 4),
+
+        # "time_to_detection_seconds": ttd,
+
         # Formats None as the string "N/A" so that the CSV renders clearly for tools with zero detections.
         "time_to_detection_seconds": round(ttd, 2) if ttd is not None else "N/A",
         "duration_seconds": duration,
@@ -114,18 +148,24 @@ def _print_comparison_table(rows: list) -> None:
     """Prints the metric comparison table to stdout with aligned columns."""
 
     separator = "=" * 80
+
+    # separator = "-" * 80
+
     print("\n" + separator)
     print("  PHASE 11.3 METRIC COMPARISON TABLE")
     print(separator)
 
-    # Formats the column header with fixed-width alignment matching the data rows below.
+    # TABLE ALIGNMENT - KB.
     header = (
         f"{'Tool':<20} {'Target':<12} "
         f"{'TP':>4} {'FN':>4} {'FP':>4} "
         f"{'Recall':>8} {'Precision':>10} {'F1':>8} {'TTD(s)':>10}"
     )
+
     print(header)
     print("-" * 80)
+
+    # print(rows)
 
     # Prints each tool and target combination as a fixed-width row matching the header above.
     for row in rows:
@@ -150,6 +190,8 @@ def main() -> None:
     counts_path = base / "raw_counts.json"
     timings_path = base / "scan_timings.json"
 
+    # counts_path = Path("raw_counts.json")
+
     # Validates that both required input files exist prior to attempting to load either.
     for required_path in (counts_path, timings_path):
         if not required_path.exists():
@@ -158,6 +200,8 @@ def main() -> None:
 
     all_counts = _load_json(counts_path)
     timings = _load_json(timings_path)
+
+    # print(all_counts.keys())
 
     # Extracts scanner counts for Juice Shop, DVWA, and the combined result from `raw_counts.json`.
     scanner_js_counts = all_counts["scanner"]["juiceshop"]
@@ -178,6 +222,8 @@ def main() -> None:
         "false_positives": [],
     }
 
+    # print(burp_js_counts)
+
     # Extracts duration values from `scan_timings.json` for each tool and target combination.
     scanner_js_duration = timings["scanner"]["juiceshop"]["duration_seconds"]
     scanner_dv_duration = timings["scanner"]["dvwa"]["duration_seconds"]
@@ -188,6 +234,9 @@ def main() -> None:
     tool_configs = [
         ("Scanner", "Juice Shop", scanner_js_counts, scanner_js_duration),
         ("Scanner", "DVWA", scanner_dv_counts, scanner_dv_duration),
+
+        # ("Scanner", "Combined", scanner_cb_counts, 0),
+
         ("Scanner", "Combined", scanner_cb_counts, scanner_js_duration + scanner_dv_duration),
         ("ZAP", "Juice Shop", zap_js_counts, zap_js_duration),
         ("Burp Community", "Juice Shop", burp_js_counts, burp_js_duration),
@@ -204,6 +253,9 @@ def main() -> None:
     # Derives the McNemar's test inputs from the `true_positives` ID lists in `raw_counts.json`.
     scanner_detected = set(scanner_js_counts.get("true_positives", []))
     zap_detected = set(zap_js_counts.get("true_positives", []))
+
+    # print(scanner_detected)
+    # print(zap_detected)
 
     # Calculates discordant pair counts where `b` is scanner-only detections and `c` is ZAP-only detections.
     b = len(scanner_detected - zap_detected)
@@ -242,6 +294,9 @@ def main() -> None:
 
     with open(csv_path, "w", newline="", encoding="utf-8") as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+
+        # writer.writerow(rows[0])
+
         writer.writeheader()
         writer.writerows(rows)
 

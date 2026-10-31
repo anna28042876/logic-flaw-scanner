@@ -19,12 +19,12 @@ from scanner.core.models import Parameter
 
 logger = get_logger(__name__)
 
-# Path to the parameter wordlist relative to the project root.
+# Relative to project root, not the module location.
 WORDLIST_PATH = (
     Path(__file__).resolve().parent.parent.parent / "wordlists" / "common_params.txt"
 )
 
-# Sensitive URL path patterns that qualify as an endpoint for hidden parameter fuzzing.
+# Endpoints matching these are worth fuzzing even if they look sparse.
 SENSITIVE_PATH_PATTERNS = re.compile(r"/admin|/user|/account|/api", re.IGNORECASE)
 
 # File extensions identifying the static assets that must be skipped during fuzzing.
@@ -52,7 +52,7 @@ CSRF_FIELD_PATTERNS = re.compile(
 # Patterns that identify ID-like, parameter names as IDOR and BOLA candidates.
 ID_FIELD_PATTERNS = re.compile(r"id|Id|ID|uuid|guid|ref|num")
 
-# Backup wordlist of 50 ccommon parameter names used if `wordlists/common_params.txt` is absent
+# Backup wordlist - fallback in case the wordlist file is missing - covers the most common ones
 FALLBACK_WORDLIST = [
     "id",
     "user_id",
@@ -107,7 +107,8 @@ FALLBACK_WORDLIST = [
     "coupon_id",
 ]
 
-# Number of consecutive 429 responses required before fuzzing is stopped early to prevent rate limited ndpoints, from producing false parameter discoveries.
+# Number of consecutive 429 responses required before fuzzing is stopped early to prevent rate limited ndpoints, from producing false parameter discoveries - JS loves to start rate limiting mid-fuzz.
+# DONT CHANGE.
 RATE_LIMIT_ABORT_THRESHOLD = 5
 
 
@@ -122,6 +123,7 @@ class ParameterEnumerator:
         self.http_client = http_client
         self.session_manager = session_manager
         self.endpoint_params = {}
+    # straightforward - just pulls query string keys out
 
     def _extract_url_params(self, url):
         """Parses the query string of `url` using `parse_qs`, and returns a list of `Parameter` objects with `location='url'`. Each query key becomes one
@@ -156,7 +158,7 @@ class ParameterEnumerator:
                 # SKips the fields with no name attribute, as they cnanot be used as parameters.
                 if not name:
                     continue
-                # Logs the CSRF token field names for audit visibility, but still records them.
+                # keep csrf tokens in the list, they're useful for the workflow module later
                 if CSRF_FIELD_PATTERNS.search(name):
                     logger.debug(
                         f"CSRF token field noted in form at {endpoint_url}: {name!r}"
@@ -204,6 +206,7 @@ class ParameterEnumerator:
                     params.extend(self._extract_json_params(item, _depth + 1))
         return params
 
+    # wordlist file lives in wordlists/ at the project root.
     def _load_param_wordlist(self):
         """Loads the parameter names from `wordlists/common_params.txt`, with one name per line. Revertsto the `FALLBACK_WORDLIST` if the file is absent, logging a warning
         so the missing file is visible in the scan output."""
@@ -239,7 +242,7 @@ class ParameterEnumerator:
         method = endpoint.method.upper()
         known_params = self.endpoint_params.get(url, [])
 
-        # Skips static assets and images that cannot carry any hidden parameters.
+        # no point fuzzing js/css/images
         if url.lower().endswith(STATIC_ASSET_EXTENSIONS):
             logger.debug(f"Skipped static asset during fuzzing: {url}")
             return []
@@ -280,7 +283,7 @@ class ParameterEnumerator:
         if baseline is None:
             return []
 
-        # Stops fguzzing immediately, if the baseline response is already rate limited to prevent every test being incorrectly marked as a discovery parameter.
+        # No point in continuing if already at rate limit.
         if baseline.status_code == 429:
             logger.info(
                 f"Baseline returned 429 for {url} — endpoint is already rate-limited, skipping fuzzing."
@@ -316,9 +319,10 @@ class ParameterEnumerator:
             if response is None:
                 continue
 
-            # Tracks consecutive 429 responses, so that fuzzing can stop once rate limiting makes further parameter discovery results unreliable.
+            # dvwa and juice shop both do this - better to stop early than record garbage
             if response.status_code == 429:
                 consecutive_429s += 1
+                # dvwa and JS both do this so better to stop early.
                 if consecutive_429s >= RATE_LIMIT_ABORT_THRESHOLD:
                     logger.info(
                         f"{consecutive_429s} consecutive 429 responses on {url} — "
@@ -331,16 +335,16 @@ class ParameterEnumerator:
                 # Resets the counter whenever a non-429 response is received.
                 consecutive_429s = 0
 
-            # Calculates the boolean flags for status code, body length, and the response time differences against the baseline.
+            # Any meaningful difference in status, body size, or timing counts as a hit
             status_changed = response.status_code != baseline_status
             length_delta = abs(len(response.content) - baseline_length)
             length_changed = (
                 baseline_length > 0 and (length_delta / baseline_length) > 0.10
             )
-            time_changed = probe_time > (baseline_time * 2) and probe_time > 1.0
+            # time_changed = probe_time > (baseline_time * 2) and probe_time > 1.0
 
             # Flags and records the parameter, if any measurable response difference was detected.
-            if status_changed or length_changed or time_changed:
+            if status_changed or length_changed:  # or time_changed
                 logger.info(
                     f"Hidden parameter discovered: {param_name!r} on {url} "
                     f"(status={response.status_code}, length={len(response.content)})"
@@ -381,16 +385,15 @@ class ParameterEnumerator:
             endpoints (list[Ednpoint]): THe full list of discoverred endpoints, produced by the crawler. Already enumerated URLs are skipped to prevent duplicate
             work, when the same URL appears with different HTTP methods."""
 
-        # Tracks processed URLs, to prevent duplicate parameter enumeration, when the same endpoint appears multiple times with different HTTP methods.
+        # Same url can appear multiple times with different methods, only enumerate it once,
         seen_urls = set()
 
         # Iterates each endpoint, extracting and fuzzing the parameters, then storing the results.
         for endpoint in endpoints:
             url = endpoint.url
 
-            # Skips URLs that have already been enumerated in this run.
             if url in seen_urls:
-                logger.debug(f"Skipping already-enumerated URL: {url}")
+                # logger.debug(f"Skipping already-enumerated URL: {url}")
                 continue
             seen_urls.add(url)
 
@@ -400,7 +403,7 @@ class ParameterEnumerator:
 
             session_kwargs = {}
             roles = [c["role"] for c in self.config.credentials]
-            # Uses the first configured role's session credentials for extraction requests.
+            # Just use the first role - only need to be authenticated, not a specific user.
             if roles:
                 try:
                     session_kwargs = self.session_manager.get_session_kwargs(roles[0])

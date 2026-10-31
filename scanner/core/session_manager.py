@@ -24,12 +24,7 @@ class SessionManager:
     sends requests using these sessions."""
 
     def __init__(self, config, http_client):
-        """Stores `config`, and `http_client`, and initialises `self.sessions` as an empty dict, ready to be populated by `authenticate_all`.
-
-        Args:
-            config (ScanConfig): Loaded scanner config providing credentials, login config, target URL, proxy, and SSL settings.
-
-            http_client (HTTPClient): The shared HTTP client, that is used to send all requests."""
+        """Stores `config`, and `http_client`, and initialises `self.sessions` as an empty dict, ready to be populated by `authenticate_all`."""
 
         self.config = config
         self.http_client = http_client
@@ -41,21 +36,20 @@ class SessionManager:
         } """
         self.sessions = {}
 
+        # Session cache attempt.
+        # self.session_cache = {}       Only stored raw `request.Session` objects,
+
     def _authenticate_form(self, cred: dict) -> bool:
         """Performs a form-based login for `cred`. Creates a fresh `requests.Session` per role, `GETs` the login page to extract CSRF toekns, andn hidden fields,
         POSTs the full payload with redirects followed, then stores the authenticated session. Also executes any `post_auth_steps` defined in `login_config`,
-        for the admin role.
-
-        Args:
-            cred (dict): A single credential entry, from `config.credentials`, containing at minimum `username`, `password`, `role`, and `auth_type` keys.
-
-        Returns:
-            bool: 'True', if authentication suceeds, and thge session was stored. 'False', if the login request failed, or the final URL indicates an auth error."""
+        for the admin role."""
 
         login_cfg = self.config.login_config
 
-        # Creates a fresh isolated session for this role.
+        # Creates a fresh isolated session for this role - dont merge IDOR breaks entirely.
         fresh_session = requests.Session()
+
+        # print(f"authenticating {cred['role']}")
 
         # Apply proxy settings if the scanner is routing traffic through one (e.g., Burp).
         if self.config.proxy is not None:
@@ -66,7 +60,7 @@ class SessionManager:
 
         # Constructs the full login URL safely by using the login URL directly if it is already absolute, otheerwise prepending the base target URL.
         raw_login_url = login_cfg["login_url"]
-        if raw_login_url.startswith("http://") or raw_login_url.startswith("https://"):
+        if raw_login_url.startswith("http://") or raw_login_url.startswith("https://"):     # Issue to log - absolute URLs getting double prefixes prepended.
             login_url = raw_login_url
         else:
             login_url = (
@@ -78,7 +72,11 @@ class SessionManager:
             get_resp = fresh_session.get(
                 login_url, verify=self.config.verify_ssl, timeout=15
             )
-            soup = BeautifulSoup(get_resp.text, "lxml")
+            
+            soup = BeautifulSoup(get_resp.text, "lxml")  # LIable to break
+
+            # logger.debug("login page fetched")
+
         except Exception as e:
             logger.warning(f"Could not GET login page for CSRF extraction: {e}")
             soup = None
@@ -88,6 +86,9 @@ class SessionManager:
             login_cfg["username_field"]: cred["username"],
             login_cfg["password_field"]: cred["password"],
         }
+
+        # payload structure
+        # payload = {"username": cred["username"], "password": cred["password"]}
 
         # COllects all the named login form fields, including hidden CSRF tokens, and submit buttons, without overwriting the credentials that are already set.
         if soup:
@@ -112,6 +113,8 @@ class SessionManager:
                             f"Form field '{name}' (type={field_type}) added to payload for {cred['role']}"
                         )
 
+                        # print(payload)
+
             # Also supports frameworks that expose `CSRF` via the meta tags.
             meta_csrf = soup.find("meta", {"name": "csrf-token"})
             if meta_csrf and meta_csrf.get("content"):
@@ -125,8 +128,11 @@ class SessionManager:
                 data=payload,
                 verify=self.config.verify_ssl,
                 timeout=15,
-                allow_redirects=True,
+                allow_redirects=True,       # Keep enabled or PHP sessions dont persist.
             )
+
+            # print(response.status_code)
+
         except Exception as e:
             logger.error(f"Form login POST failed for role '{cred['role']}': {e}")
             return False
@@ -140,6 +146,7 @@ class SessionManager:
 
         # Confirms the final URL is not a login, or setup page, indicating auth failure.
         final_url_lower = response.url.lower()
+        # Login pages returning 200 was masking failed auth previously.
         ended_at_auth_page = any(
             indicator in final_url_lower for indicator in ("login", "setup")
         )
@@ -158,7 +165,7 @@ class SessionManager:
             # Stores the auithenticated session, after the redirect chain completes, so that the saved cookies reflect the final valid login stte.
             self.sessions[cred["role"]] = {
                 "cookies": dict(fresh_session.cookies),
-                "session_obj": fresh_session,
+                "session_obj": fresh_session,       # Keep storing live session objects - dont change - cookies not enough.
                 "auth_type": "form",
                 "username": cred["username"],
             }
@@ -171,13 +178,16 @@ class SessionManager:
             )
 
             # Executes any post-authentication steps using the admin session, e.g. setting DVWA security level to Low.
-            post_auth_steps = login_cfg.get("post_auth_steps", [])
-            if post_auth_steps and cred.get("role") == "admin":
+            post_auth_steps = login_cfg.get("post_auth_steps", [])      # TODO: Possibly refractor post-auth into its own helper.
+            if post_auth_steps and cred.get("role") == "admin":         # Only admin should run setup/security config requests.
                 # Iterates each configured post-auth step and dispatches a POST request using the authenticated admin session.
                 for step in post_auth_steps:
                     step_url = step.get("url", "")
                     step_method = step.get("method", "POST").upper()
                     step_data = step.get("data", {})
+
+                    # logger.debug(f"running post auth step {step_url}")
+
                     try:
                         if step_method == "POST":
                             fresh_session.post(
@@ -200,17 +210,14 @@ class SessionManager:
         logger.warning(
             f"Form auth failed for role '{cred['role']}' - final URL: {response.url}, status: {response.status_code}"
         )
+
+        # print(response.text[:300])
+
         return False
 
     def _authenticate_bearer(self, cred: dict) -> bool:
         """Performs a JSON post to the login endpoint, to obtain a JWT bearer token. Tries the keys `token`, `access_token`, `jwt``, and
-        `auth_token`, in the response body, as well as the nested `authentication` wrapper used by JS.
-
-        Args:
-            cred (dict): A single credential entry from `config.crederntials`, containing `username`, `password`, and `role`.
-
-        Returns:
-            bool: 'True', if a tokn was successfullyu extracted, and stored. 'False', if the login requerst failed, or no token field ould be found in the repsonse."""
+        `auth_token`, in the response body, as well as the nested `authentication` wrapper used by JS."""
 
         login_cfg = self.config.login_config
         raw_login_url = login_cfg["login_url"]
@@ -229,6 +236,9 @@ class SessionManager:
                 login_url,
                 json_body={"email": cred["username"], "password": cred["password"]},
             )[0]
+
+            # print(response)
+
         except Exception as e:
             logger.error(f"Bearer login request failed for role '{cred['role']}': {e}")
             return False
@@ -242,6 +252,9 @@ class SessionManager:
         # Parse the JSON response safely.
         try:
             body = response.json()
+
+            # logger.debug(body)
+
         except Exception:
             logger.warning(
                 f"Bearer login response was not valid JSON for role '{cred['role']}'"
@@ -250,10 +263,12 @@ class SessionManager:
 
         # Tries multiple common token fields across frameworks.
         extracted_token = None
+        # JWT Field names inconsistent between apps - look up to expand.
         for key in ("token", "access_token", "jwt", "auth_token"):
             if key in body:
                 extracted_token = body[key]
                 break
+            # JS only
             if "authentication" in body and isinstance(body["authentication"], dict):
                 if key in body["authentication"]:
                     extracted_token = body["authentication"][key]
@@ -263,6 +278,9 @@ class SessionManager:
             logger.warning(
                 f"Could not extract bearer token for role '{cred['role']}' - keys found: {list(body.keys())}"
             )
+
+            # print(body)
+
             return False
 
         # Stores tokens and pre-built authorisation headers.
@@ -279,13 +297,7 @@ class SessionManager:
         return True
 
     def _authenticate_basic(self, cred: dict) -> bool:
-        """Performs HTTP Basic authentication, by base64-encoding the credentials, and then verifying them against the `/api/` endpoint.
-
-        Args:
-            cred (dict): A single credential entry from `config.credentials`, containing `username`, `password`, and `role`.
-
-        Returns:
-            bool: 'True' iof the test request returned a 200, 201, or 204 response, and the credentials were stored. 'False' otherwise."""
+        """Performs HTTP Basic authentication, by base64-encoding the credentials, and then verifying them against the `/api/` endpoint."""
 
         encoded = base64.b64encode(
             f"{cred['username']}:{cred['password']}".encode()
@@ -299,8 +311,14 @@ class SessionManager:
             "GET", test_url, headers=auth_header
         )
 
+        # old endpoint
+        # test_url = self.config.target_url
+
         if response is None or response.status_code not in (200, 201, 204):
             logger.warning(f"Basic auth test request failed for role '{cred['role']}'")
+
+            # print(response.status_code)
+
             return False
 
         self.sessions[cred["role"]] = {
@@ -315,14 +333,9 @@ class SessionManager:
         return True
 
     def _authenticate_api_key(self, cred: dict) -> bool:
-        """Stores API key authentication, by reading the key from  the `cred`, and buyilding the appropriate header. NO verification request is sent.
+        """Stores API key authentication, by reading the key from  the `cred`, and buyilding the appropriate header. NO verification request is sent."""
 
-        Args:
-            cred (dict): A single credential entry containing `api_key`, `role`, nd optionally `api_key_hader` (defaults to `X-API-KEY`).
-
-        Returns:
-            bool: 'True', if an `api_key` value was found, and stroed. 'False', if the `api_key` field is absent from `cred`."""
-
+        # Dont auth check - some APIs rate-limit key validation.
         api_key = cred.get("api_key")
 
         if not api_key:
@@ -330,6 +343,9 @@ class SessionManager:
             return False
 
         api_key_header = cred.get("api_key_header", "X-API-Key")
+
+        # previous header default
+        # api_key_header = "Authorization"
 
         self.sessions[cred["role"]] = {
             "cookies": {},
@@ -341,10 +357,7 @@ class SessionManager:
         return True
 
     def authenticate_all(self) -> dict:
-        """Iterates through all of the configured credentials, and dispatches each to the correct authentication handler, based on its `auth_type` field.
-
-        Returns:
-            dict: A mapping of `{role: bool}`, indicating whether authentication suceeeded for each configured role."""
+        """Iterates through all of the configured credentials, and dispatches each to the correct authentication handler, based on its `auth_type` field."""
 
         results = {}
 
@@ -352,6 +365,8 @@ class SessionManager:
             role = cred.get("role", "unknown")
             auth_type = cred.get("auth_type", "form")
             logger.info(f"Authenticating role '{role}' via {auth_type}...")
+
+            # TODO replace with dispatch map later maybe
 
             if auth_type == "form":
                 results[role] = self._authenticate_form(cred)
@@ -371,15 +386,9 @@ class SessionManager:
 
     def get_session_kwargs(self, role: str) -> dict:
         """It returns the correct request `kwargs` (cookies or headers) for a given role,
-        allowing other modules to remain completely auth-agnostic.
+        allowing other modules to remain completely auth-agnostic."""
 
-        Args:
-            role (str): The role name to look up, e.g., `user_a`, `admin`. Pass `None` for an unauthenticated request.
-
-        Returns:
-            dict: For form auth: `{'session_key': role}`. For bearer/basic/api_key: `{'headers': auth_header_dict, 'session_key': role}`. Returns an empty dict for unauthenticated requests, or if no session exists for the role"""
-
-        # Returns empty kwargs immediately for unauthenticated requests, without logging a warning.
+        # Returns empty kwargs immediately for unauthenticated requests, without logging a warning - prevents glitchy logs.
         if role is None:
             return {}
 
@@ -389,6 +398,9 @@ class SessionManager:
             logger.warning(
                 f"No session found for role '{role}' - returning empty kwargs"
             )
+
+            # print(self.sessions)
+            # Dont attach anything for guest requests.
             return {}
 
         auth_type = session.get("auth_type")
@@ -402,28 +414,18 @@ class SessionManager:
         return {}
 
     def get_cookies(self, role: str) -> dict:
-        """Returns the stored cookies dict, for the given role.
-
-        Args:
-            role (str): The role name to look up.
-
-        Returns:
-            dict: The cookies dict for the role, or an empty dict if the role has no session, or the session contains no cookies."""
+        """Returns the stored cookies dict, for the given role."""
 
         session = self.sessions.get(role, {})
         return session.get("cookies", {})
 
     def get_all_roles(self) -> list:
-        """Returns all the roles that have been successfuly authenticated.
+        """Returns all the roles that have been successfuly authenticated."""
 
-        Returns:
-            list[str]: ALl keys in `self.sessions`, representing authenticated roles."""
+        # print(self.sessions.keys())
 
         return list(self.sessions.keys())
 
     def get_unauthenticated_kwargs(self) -> dict:
-        """Returns an empty dict, to be used as session kwargs, for unauthenticated requests.
-
-        Returns:
-            dict: An empty dict, ensuring no auth headers, or cookies, are attached."""
+        """Returns an empty dict, to be used as session kwargs, for unauthenticated requests."""
         return {}

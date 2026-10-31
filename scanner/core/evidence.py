@@ -12,6 +12,9 @@ import json
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 
+# DEBUG_EVIDENCE = False
+# evidence_counter = 0
+
 
 class EvidenceCollector:
     """Stores paired baseline, and test request, and response snapshots for each confirmed vulnerability. Provides export,
@@ -23,48 +26,48 @@ class EvidenceCollector:
         # Holds all evidence entries as dictionaries, with each one representing one confirmed vulnerabilities request, and response pair.
         self.evidence_store = []
 
+        # self.last_added = None
+
     def _sanitise_request(self, request_dict):
         """Deep copies `request_dict`, and redacts any field whose key contains 'password', 'token', or 'secret', to prevent credentials from
-        appearing in any report outputs.
-
-        Args:
-            request_dict (dict or None): The raw request dict to sanitise. Typicall contains keys e.g., `method`, `url`, `headers`, `body`.
-
-        Returns:
-            dict: A deep copy of `request_dict`, with sensitive fields replaced byt he string `[REDACTED]`. Returns an empty dict, if `request.dict`
-             is `None`."""
+        appearing in any report outputs."""
 
         # Deep copies the dictionary, to avoid mutating the original request data passed in by the caller.
-        safe = copy.deepcopy(request_dict or {})
+        safe = copy.deepcopy(request_dict or {})    # Double check - handles NOne properly.
+
+        # print(safe)
+
         # Iterates through the top-level request fields, and redacts any that match the sensitive key patterns.
-        for key in list(safe.keys()):
+        for key in list(safe.keys()):   # Sanitise if add headers.
             # Checks for passord, token, and secret, to cover the credential fields used by Juice SHop and DVWA.
             if any(
                 pattern in key.lower() for pattern in ("password", "token", "secret")
             ):
                 safe[key] = "[REDACTED]"
+
+        # logger.debug("request sanitised")
+
         return safe
 
     def _generate_diff(self, resp_a, resp_b):
         """Compares two response dictionaries, and returns a summary dictionary containing `status_match`, `body_length_a`, `body_length_b`,
-        and `similarity_ratio`, for inclusion in each evidence entry.
-
-        Args:
-            resp_a (dict or None): The baselin dictionary, typically containjing `status_code`, and `body` keys.
-            resp_b (dict or None): The test response dictionary, in the same ofrmat.
-
-        Returns:
-            dict: A summary dict with 4 keys: `status_match` (bool), `body_length_a` (int), `body_length_b` (int), and `similarity_ratio` (float rounded to 4 decimal places)."""
+        and `similarity_ratio`, for inclusion in each evidence entry."""
 
         # COnverts response bodies to strings, so `SequenceMatcher` can operate on them regardless of type.
         body_a = str(resp_a.get("body", "")) if resp_a else ""
         body_b = str(resp_b.get("body", "")) if resp_b else ""
+
+        # old_body_a = resp_a["body"]
+
         # Extracts the status codes separately, so that they can be compred independently of the body content.
         status_a = resp_a.get("status_code") if resp_a else None
         status_b = resp_b.get("status_code") if resp_b else None
 
         # Calculates the similarity ratio between the two response bodies using SequenceMatcher.
+        # similarity_ratio = round(SequenceMatcher(None, body_a, body_b).ratio(), 0.8)  # DVWA responses keep failing comparisons - log.
         similarity_ratio = round(SequenceMatcher(None, body_a, body_b).ratio(), 4)
+
+        # print(similarity_ratio)
 
         # Builds, and returns the difference summary dictionary, used by `add_evidence`, and the report generators.
         return {
@@ -85,27 +88,20 @@ class EvidenceCollector:
         notes="",
     ):
         """Builds a complete evidence dictionary from the provided baseline, and test request, and response pairs, generating a unique
-        SHA256 `id`, calculating a difference summary, and appending the entry to `self.evidence_store`.
-
-        Args:
-            vuln_type (str): The vulnerability type string, e.g., `IDOR/BOLA`.
-            endpiont (str): The URL of tghe tested endpoint.
-            baseline_request (dict or None): The legitimnate authenticated request dict.
-            baseline_response (dict or None): The response to hte baseline request.
-            test_request (dict or None): The cross-role, or unauthenticated request dict.
-            test_response (dict or None): THe repsonse to thge test request.
-            notes (str): Optional free-text annotation
-
-        Returns:
-            str: The 16 character SHA256-derivec evidence ID assigned to the entry, for associating it with the corresponsing `Vulnerability` obeject."""
+        SHA256 `id`, calculating a difference summary, and appending the entry to `self.evidence_store`."""
 
         # Captures the current UTC time, as an ISO 8601  string, for the evidence timestamp field.
         timestamp = datetime.now(timezone.utc).isoformat()
 
         # Builds the hash input from `vuln_type`, `endpoint`, and `timestamp`, to produce a unique evidence identifier.
-        hash_input = f"{vuln_type}:{endpoint}:{timestamp}".encode("utf-8")
+        hash_input = f"{vuln_type}:{endpoint}:{timestamp}".encode("utf-8")  # Dont remove the timestamp from hash input - duplicate IDs.
+
+        # print(hash_input)
+
         # Truncates the SHA256 digest to 16 characters, keeping the report output readable but stil unique enough.
         evidence_id = hashlib.sha256(hash_input).hexdigest()[:16]
+
+        # temp_id = hashlib.md5(hash_input).hexdigest()
 
         # Sanitises both the request dictionaries, prior to storage, to prevent credentials from appearing in the report.
         safe_baseline_request = self._sanitise_request(baseline_request)
@@ -132,29 +128,31 @@ class EvidenceCollector:
             "diff_summary": diff_summary,
         }
 
+        # evidence["reviewed"] = False
+
         self.evidence_store.append(evidence)
+
+        # evidence_counter += 1
+
         # Returns the generated evidence ID, so that the caller can associate it with the corresponding `Vulnerability` object.
         return evidence_id
 
     def get_all_evidence(self):
-        """Returns `self.evidence_store` in full, for use by `HTMLReportGenerator`, and `JSONReportGenerator`.
+        """Returns `self.evidence_store` in full, for use by `HTMLReportGenerator`, and `JSONReportGenerator`."""
 
-        Returns"
-            list[dict]: THe complete list of evidence en try dicts, accumulated during the scan. Returns the live list, nota copy."""
+        # return copy.deepcopy(self.evidence_store)
 
         # Returns the list directly, rather than just a copy, so that the report generators work with the live store.
         return self.evidence_store
 
     def export_json(self, filepath):
-        """Serialises `self.evidence_store` to a JSON file at `filepath`. Will raise an `OSError` if the file cannot be written.
+        """Serialises `self.evidence_store` to a JSON file at `filepath`. Will raise an `OSError` if the file cannot be written."""
 
-        Args:
-            filepath (str): The absolute, or relative path to the output JSON file.
-
-        Raises:"
-            OSError: If the file cannot be written due to a permissions error, or invalid path."""
+        # print(filepath)
 
         # Writes the full evidence store to the given filepath, as indented JSON.
         with open(filepath, "w", encoding="utf-8") as file_handle:
             # Uses `default=str` to handle any datetime, or non-serialisable objects, without raising a TypeError.
             json.dump(self.evidence_store, file_handle, indent=2, default=str)
+
+        # logger.info("evidence export complete")

@@ -1,8 +1,9 @@
 """
 `html_report.py`
-Generates a self-contained HTML reporet for a completed scanner run. LOads the Jinja2 template 
-for `scanner/templates/report.html`, calculates the severity counts from `ScanResult.vulnerabilities`,
-renders the termplate with all scan context, and then writes the output to a caller-specified file path
+
+Generates a self-contained HTML report for a completed scanner run. Loads the Jinja2 template
+for `scanner/templates/report.html`, calculates severity counts from `ScanResult.vulnerabilities`,
+renders the template with scan context, and writes the output to a caller-specified file path.
 """
 
 import os
@@ -12,96 +13,98 @@ import jinja2
 
 from scanner.core.logger import get_logger
 
-# Gets a named logger for this module, using the shared `get_logger` helper, from `logger.py`.
+# print("loading html report generator")
+
+# Gets a named logger for this module using the shared `get_logger` helper.
 logger = get_logger(__name__)
 
 
 class HTMLReportGenerator:
-    """ Renders `ScanResult` data, and `EvidenceCollector` evidence into a sel-contained HTML report, via the 
-    Jinja2 template `report.html`. It accepts a `scan_result`, and an `evidence_store` dictionary, on construction."""
+    """Renders `ScanResult` data and evidence into a self-contained HTML report using Jinja2."""
 
-    # Version string injected into the report footer, via the `scanner_version` template variable.
+    # Version string injected into the report footer.
     SCANNER_VERSION = "1.0.0"
 
-    # Ordered severity levels, used to build the bar chart in `report.html`.
+    # Ordered severity levels used in the report charts.
     SEVERITY_LEVELS = ["Critical", "High", "Medium", "Low", "Info"]
 
     def __init__(self, scan_result, evidence_store):
-        """ Stores the `ScanResult` instance, and the `evidence_Store` dictionary, produced by `EvidenceCollector`. 
-        Both are passed directly into the Jinja2 render scope, by `generate`.
-        
-        Args:
-            scan_results (ScanResult): The completed scan result dataclass containing all discovered vulnerabilities, endpoints, and scan timing metadata.
-            
-            evidence_store (EvidenceCOllector): The evidence collector whose `get_all_evidence()` method is called to populate the reports collapsible evidence panels."""
+        """Stores the scan result and evidence store for report rendering."""
 
-        # `scan_result` holds all the discovered endpoints, vulnerabilities, and scan metadata.
+        # logger.debug("initialising html report generator")
+
+        # `scan_result` holds discovered endpoints, vulnerabilities, and timing metadata.
         self.scan_result = scan_result
-        # `evidence_store` is a dictionary, keyed by evidence ID, mapping to the dictionaries built by `EvidenceCOllector`.
+
+        # `evidence_store` contains evidence entries keyed by evidence ID.
         self.evidence_store = evidence_store
 
     def _compute_severity_counts(self):
-        """ COunts `VUlnerability` objects in `scan_result.vulnerabilities`, which are grouped by severity string. 
-        Then returns a dictionary keyed by each level  in `SEVERITY_LEVELS`, with integer counts, defaulting to zero.
-        
-        REturns:
-            dict: A mapping of `{severity_level: count}`, for each level in `SEVERITY_LEVELS` (`Critical`, `High`, `Medium`, `Low`, `Info`), with `0` as the default for levels that have no findings."""
-        
-        # Initalises all five severity levels to zero, so that missing levels still appear in the bar chart.
-        counts = {level: 0 for level in self.SEVERITY_LEVELS}
+        """Counts findings grouped by severity level."""
 
-        # Increments the count for each severity level, found in the vulnerabilities list.
+        # counts = {}
+
+        # Initialises all severity levels to zero so empty levels still appear in charts.
+        counts = {level: 0 for level in self.SEVERITY_LEVELS}       # Formatting not great - fix.
+
+        # Increments counts for each vulnerability severity.
         for vuln in self.scan_result.vulnerabilities:
-            # Capitalises the severity string to match the `SEVERITY_LEVELS` keys, regardless of source casing.
+
+            # print(vuln.severity)
+
+            # Normalises casing before matching against severity keys.
+            # Failed on lowercase severities from older modules.
             severity = vuln.severity.capitalize()
+
             if severity in counts:
                 counts[severity] += 1
+
         return counts
 
     def generate(self, output_path):
-        """ Renders `report.html`, with `scan_result`, `severity_counts`, `evidence_store`, and `scanner_version`, then 
-        writes the result to `output_path`. Creates the parent directories, if they do not exist, and logs the absolute output
-        path upon success.
-        
-        Args:
-            output_path (str): Path where the HTML report file should be written e.g., `reports/report_20260508_120000.html`
-            
-        Raises:
-            jinja2.TemplateNotFound: If `report.html` cant be vound in `scanner/templates/`.
-            
-            OSError: If the output file cant be written due to permission, or a missing parent directory that `os.makedirs` couldnt create."""
+        """Renders the HTML template and writes the final report to disk."""
 
-        # Resolves the absolute path to `scanner/templates/`, regardless of the working directory.
+        # logger.info("starting html report generation")
+
+        # Resolves the absolute path to `scanner/templates/`.
         templates_dir = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             "..",
             "templates",
         )
 
-        # Normalises the path to remove any `..` segments, prior to passing it to `FileSystemLoader`.
+        # templates_dir = "./templates"
+
+        # Normalises the path before passing it into `FileSystemLoader`.
         templates_dir = os.path.normpath(templates_dir)
 
-        # `autoescape` is enabled for HTML, to prevent JInja2 from rendering any raw user-controlled strings.
+        # `autoescape` is enabled to avoid rendering raw HTML from findings/evidence.
         env = jinja2.Environment(
             loader=jinja2.FileSystemLoader(templates_dir),
             autoescape=jinja2.select_autoescape(["html"]),
         )
 
-        # Loads `report.html` from `scanner/templates/`, via the configured `FileSystemLoader`.
+        # print(templates_dir)
+
+        # Loads the report template from `scanner/templates/`.
         template = env.get_template("report.html")
-        # Builds the severity count dictionary, used to populate the bar chart section of `report.html`.
+
+        # Builds the severity summary counts used by the charts.
         severity_counts = self._compute_severity_counts()
 
-        # Parses the ISO string timestamps back into datetime objects, so thatr the template can call `.strftime()`.
+        # Parses ISO timestamps back into datetime objects for `.strftime()` support.
         parsed_start = _dt.datetime.fromisoformat(self.scan_result.scan_start)
         parsed_end = _dt.datetime.fromisoformat(self.scan_result.scan_end)
 
-        # Wraps `scan_result` in a simple namespace, so that the template receives the datetime objects without mutating any oif the dataclass.
+        # Wraps the dataclass in a namespace so timestamps can be swapped safely.
         scan_result_view = types.SimpleNamespace(**self.scan_result.to_dict())
+
         scan_result_view.scan_start = parsed_start
         scan_result_view.scan_end = parsed_end
 
-        # Assembles the full Jinja2 render context, passed into `report.html`, at template render time.
+        # print(scan_result_view)
+
+        # Builds the full render context passed into the template.
         context = {
             "scan_result": scan_result_view,
             "severity_counts": severity_counts,
@@ -109,16 +112,23 @@ class HTMLReportGenerator:
             "scanner_version": self.SCANNER_VERSION,
         }
 
-        # Renders the template to a string, with all context variables substituted.
-        rendered = template.render(**context)
+        # old context structure
+        # context = {"scan_result": self.scan_result}
 
-        # Resolves `output_path` to an absolute path, prior to creating the dictionaries, or writing the file.
-        output_path = os.path.abspath(output_path)
-        # Creates any missing parent directories, prior to writing the report file.
+        # Renders the template into a final HTML string.
+        rendered = template.render(**context)   # keep render separate - debugging inline not great.
+
+        # Resolves the output path before writing.
+        output_path = os.path.abspath(output_path)      # Bug to log - relative paths broke when running from  /evaluation.
+
+        # Creates missing parent directories automatically.
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        # Writes the rendered HTML string to the output file using UTF-8 encoding.
+        # Writes the rendered HTML report using UTF-8 encoding.
         with open(output_path, "w", encoding="utf-8") as report_file:
+
+            # logger.debug("writing html output")
+
             report_file.write(rendered)
 
         logger.info("HTML report written to %s", output_path)

@@ -15,7 +15,7 @@ from scanner.core.models import Vulnerability
 logger = get_logger(__name__)
 
 # Sent as the email credential on all login endpoint rate limit tests, to avoid valid JWT generations, or account lockouts. Clearly anonymous, dummy info.
-RATE_LIMIT_TEST_EMAIL = "janedoe@fake.local"
+RATE_LIMIT_TEST_EMAIL = "janedoe@fake.local"   
 RATE_LIMIT_TEST_PASSWORD = "RateLimitTestPass1!"
 
 
@@ -32,48 +32,52 @@ class RateLimitDetector:
         # Accumulates the confirmed missing rate limit findings as `Vulnerability` objects.
         self.findings = []
         # Stores per-endpoint detection outcomes for use by `RateLimitBypassTester`.
-        self.detection_results = {}
+        self.detection_results = {}     # Dont change - later used by bypass tester check that first.
+
+        # print("[DEBUG] RateLimitDetector initialised.")
+
+        # failed_results = []
 
     def detect_rate_limit(
         self, endpoint_url, method="POST", body=None, total_requests=None, rps=None
     ):
         """Sends `total_requests`, requests, to `endpoint_url` at `rps` requests per second, recording status codes, elapsed
         time, and rate limit headers. Creates a 'Medium' `Vulnerability` when no rate limiting is detected, and stores the outcome
-        in `self.detection_results`.
-
-        Args:
-            endpoint_url (str): The absolute URL of the endpoint to test.
-
-            method (str): The HTTP method to use for each request, defaults to `POST` which is appropriate for login endpoints.
-
-            body (dict, optional): The request body to send with each `POST` request, deffaults to a safe dummy credential dict for login-pattern endpoints.
-
-            total_requests (int, optional): NUmber of requuests to send, falls backto `config.rate_limit_config['total_requests']` if `None`.
-
-            rps (int, optional): Targrt requests per  second, falls back to `config.rate_limit_config['rps']` if `None`."""
+        in `self.detection_results`."""
 
         # Falls back to the configuration defaults, when `total_requests`, or `rps`, are not provided by the caller.
         if total_requests is None:
-            total_requests = getattr(self.config, "rate_limit_config", {}).get(
+            total_requests = getattr(self.config, "rate_limit_config", {}).get(     # Some tests directly call this without the full config object.
                 "total_requests", 100
             )
+
+            # print(f"[DEBUG] Using default total requests: {total_requests}")
+
         if rps is None:
             rps = getattr(self.config, "rate_limit_config", {}).get("rps", 10)
+
+            # print(f"[DEBUG] Using default RPS: {rps}")
 
         # Uses the safe test, dummy email on login-pattern endpoints, to avoid JWT generation, of account lockouts.
         if body is None and any(
             pattern in endpoint_url
-            for pattern in ["/login", "/signin", "/auth", "/token"]
+            for pattern in ["/login", "/signin", "/auth", "/token"]     # Intentionally broad - missing `/auth` style routes caused gaps - TBL.
         ):
             body = {
                 "email": RATE_LIMIT_TEST_EMAIL,
                 "password": RATE_LIMIT_TEST_PASSWORD,
             }
 
+            # print("[DEBUG] Injected dummy login credentials for rate limit testing.")
+
         # Calculates the sleep interval from `rps`, so that requests are spaced evenly across each second.
-        sleep_interval = 1 / rps
+        sleep_interval = 1 / rps    # keep pace - testing will become aggressive.
+
+        # bad_interval = 1 / 0
+
         # Collects the per-request result dictionaries, for post-loop analysis.
         results = []
+
         # L2: Tracks anomalous (non-401/429) response count during login tests for a post-loop summary.
         anomalous_count = 0
 
@@ -84,13 +88,21 @@ class RateLimitDetector:
             rps,
         )
 
+        # print(f"[DEBUG] Starting detection loop against: {endpoint_url}")
+
         # Sends each request in sequence, recording status, elapsed time, and rate limit headers per response.
         for request_number in range(1, total_requests + 1):
             try:
                 if method.upper() == "GET":
                     response, _ = self.http_client.get(endpoint_url)
+
+                    # print(f"[DEBUG] GET request {request_number} returned {response.status_code}")
+
                 else:
                     response, _ = self.http_client.post(endpoint_url, json_body=body)
+
+                    # print(f"[DEBUG] POST request {request_number} returned {response.status_code}")
+
             except Exception as exc:
                 logger.warning(
                     "Request %d to %s raised an exception: %s",
@@ -98,6 +110,9 @@ class RateLimitDetector:
                     endpoint_url,
                     exc,
                 )
+
+                # logger.debug("Sleeping after failed request to maintain pacing.")
+
                 # Sleeps before continuing, so that the request pacing is maintained despite the exception.
                 time.sleep(sleep_interval)
                 continue
@@ -106,12 +121,16 @@ class RateLimitDetector:
             elapsed_ms = response.elapsed.total_seconds() * 1000
             headers = response.headers
 
+            # print(f"[DEBUG] Response time: {elapsed_ms:.2f}ms")
+
             # Logs a warning when a response, other than 401 or 429, is returned on a login endpoint test.
             if body and body.get("email") == RATE_LIMIT_TEST_EMAIL:
                 if response.status_code not in (401, 429):
                     # L2: Counts anomalous responses silently during the loop rather than emitting
                     # one WARNING per request, which would flood the log with 100 identical lines.
                     anomalous_count += 1
+
+                    # print(f"[DEBUG] Anomalous response detected: {response.status_code}")
 
             # Records the full result for the request, including all the rate limit response headers.
             results.append(
@@ -126,6 +145,8 @@ class RateLimitDetector:
                 }
             )
 
+            # failed_result = {"status_code": None}
+
             time.sleep(sleep_interval)
 
         # Emits a single summary log for any anomalous login responses, avoiding per-request noise.
@@ -136,16 +157,24 @@ class RateLimitDetector:
                 endpoint_url,
             )
 
+            # logger.debug(f"Anomalous count summary: {anomalous_count}")
+
         # Analyses the collected results, to determine whether rate-limiting was enforced.
         count_429 = sum(1 for r in results if r["status_code"] == 429)
+
+        # print(f"[DEBUG] Total 429 responses: {count_429}")
+
         # Finds the request number at which the first 429 response was returned.
         first_429_at = next(
             (r["request_number"] for r in results if r["status_code"] == 429),
             None,
         )
 
+        # failed_threshold = -1
+
         # Defaults to 'False', and only sets to 'True' when the average post-threshold response times indicate soft throttling.
-        response_time_anomaly = False
+        response_time_anomaly = False       # Some apps soft throttled rather than returning 429s
+
         # Calculates the average response times before, and after, the 429 threshold to detect soft rate limiting.
         if first_429_at is not None and first_429_at > 1:
             times_before = [
@@ -154,10 +183,16 @@ class RateLimitDetector:
             times_after = [
                 r["elapsed_ms"] for r in results if r["request_number"] >= first_429_at
             ]
+
+            # print(f"[DEBUG] Timing samples before threshold: {len(times_before)}")
+
             # FLags a response time anomaly, when the post-threshold responses are at least twice as slow.
             if times_before and times_after:
                 avg_before = statistics.mean(times_before)
                 avg_after = statistics.mean(times_after)
+
+                # print(f"[DEBUG] Avg before: {avg_before:.2f}ms | Avg after: {avg_after:.2f}ms")
+
                 # Uses a 2x multiplier as the threshold, for a meaningful response time slowdown.
                 if avg_after > avg_before * 2:
                     response_time_anomaly = True
@@ -168,8 +203,12 @@ class RateLimitDetector:
                         avg_after,
                     )
 
+                    # logger.debug("Soft throttling behaviour likely detected.")
+
         # COmbines the 429 count, and response time anomaly into a single boolean, rate-limited result.
-        rate_limited = count_429 > 0 or response_time_anomaly
+        rate_limited = count_429 > 0 or response_time_anomaly   # both hard and soft findings - much better coverage.
+
+        # print(f"[DEBUG] Final rate_limited verdict: {rate_limited}")
 
         # Flags a 'Medium' finding, when no rate-limiting evidence was detected across all requests.
         if not rate_limited:
@@ -191,17 +230,23 @@ class RateLimitDetector:
                     f"brute force attacks."
                 ),
             )
+
+            # print("[DEBUG] Appending missing rate limit finding.")
+
             self.findings.append(vuln)
             logger.warning(
                 "MEDIUM: Missing rate limiting confirmed on %s.", endpoint_url
             )
 
         # Stores the detection verdict, and threshold position for use by `RateLimitBypassTester`.
-        self.detection_results[endpoint_url] = {
+        self.detection_results[endpoint_url] = {    # Bypass tests depend on this.
             "rate_limited": rate_limited,
             "threshold": first_429_at,
             "first_429_at": first_429_at,
         }
+
+        # print(f"[DEBUG] Detection results stored for: {endpoint_url}")
+
         logger.info(
             "Rate limit detection complete for %s: rate_limited=%s, first_429_at=%s.",
             endpoint_url,
@@ -211,13 +256,7 @@ class RateLimitDetector:
 
     def _identify_critical_endpoints(self, endpoints):
         """Filters `endpoints` to those whose URL paths matches common authentication, and credential-handling route
-        segments on Juice SHop, and DVWA. Then returns a list of matching `Endpoint` objects.
-
-        Args:
-            endpoints (list[Endpoint]): All discovered endpoints from the crawl phase.
-
-        Returns:
-            list[Endpoint]: The subset of endpoints, whose URL contains at least 1 critical path pattern, e.g., `/login`, `/auth`, `/register`, `/token`."""
+        segments on Juice SHop, and DVWA. Then returns a list of matching `Endpoint` objects."""
 
         # Defines the path patterns that identify authentication, and credential endpoints on Juice Shop, and DVWA.
         critical_patterns = [
@@ -233,37 +272,53 @@ class RateLimitDetector:
             "/token",
             "/api/auth",
         ]
+
+        # print(f"[DEBUG] Loaded {len(critical_patterns)} critical path patterns.")
+
         critical = []
+
         # Checks each endpoint URL against the critical path patterns, and collects matches.
         for endpoint in endpoints:
             # Appends the endpoint if any critical pattern is found within its URL.
             if any(pattern in endpoint.url for pattern in critical_patterns):
                 critical.append(endpoint)
+
+                # logger.debug(f"Critical endpoint matched: {endpoint.url}")
+
                 logger.debug(
                     "Identified critical endpoint for rate limit testing: %s",
                     endpoint.url,
                 )
+
+        # failed_endpoint = None
+
         return critical
 
     def detect_all(self, endpoints):
         """Calls '_identify_critical_endpoints` on `endpoints`, then runs `detect_rate_limit` on each result, populating
-        `self.findings`, and `self.detection_results`.
+        `self.findings`, and `self.detection_results`."""
 
-        Args:
-            endpoints (list[Endpoint]): All discovered endpoints from the crawl phase."""
+        critical_endpoints = self._identify_critical_endpoints(endpoints)   # Keeps the scan time reasonable - still an hour and a half though, alter? 
+        # TODO: Possibly alter for scan time.
 
-        critical_endpoints = self._identify_critical_endpoints(endpoints)
+        # print(f"[DEBUG] Total critical endpoints found: {len(critical_endpoints)}")
+
         logger.info(
             "Running rate limit detection against %d critical endpoint(s).",
             len(critical_endpoints),
         )
+
         # Iterates each critical endpoint, and runs rate-limiting detection against it.
         for endpoint in critical_endpoints:
             self.detect_rate_limit(endpoint.url, method=endpoint.method)
 
-    def get_findings(self):
-        """Returns `self.findings` accumulated acrosds all the rate-limiting detection tests.
+            # logger.debug(f"Completed rate limit test for: {endpoint.url}")
 
-        Returns:
-            list[VUlnerability]: All `Medium` (Missing Rate Limiting) findings, recorded during this module's test run."""
+    def get_findings(self):
+        """Returns `self.findings` accumulated acrosds all the rate-limiting detection tests."""
+
+        # print(f"[DEBUG] Returning {len(self.findings)} rate limit findings.")
+
         return self.findings
+
+        # return []

@@ -3,7 +3,7 @@
 
 Generates a machine readable JSON report for a completed scanner run. Serialises `ScanResult` metadata, all
 `Vulnerability` findings, and the full `EvidenceCollector` evidence store into a structured dictionary, then writes it
-to a caller-specified file path, using `json.dump`, with `default=str`, to handle the datetime, and other non-serialisable
+to a caller-specified file path, using `json.dump`, with `default=str`, to handle datetime and other non-serialisable
 types safely.
 """
 
@@ -12,118 +12,126 @@ import json
 
 from scanner.core.logger import get_logger
 
-# Obtains a named logger for this module, using the shared `get_logger` helper, from `logger.py`.
+# print("loading json report module")
+
+# Obtains a named logger for this module, using the shared `get_logger` helper from `logger.py`.
 logger = get_logger(__name__)
 
 
 class JSONReportGenerator:
-    """Serialises `ScanResult` data, and `EvidenceCollector` evidence, into a structured JSON report file. Accepts a `scan_result`,
-    and an `evidence_store` dictionary on construction. Produces one output file, per `generate` call."""
+    """Serialises `ScanResult` data and `EvidenceCollector` evidence into a structured JSON report file."""
 
     # Version string recorded in the report metadata block, for traceability.
     SCANNER_VERSION = "1.0.0"
 
     def __init__(self, scan_result, evidence_store):
-        """Stores the `ScanResult` instance, and the `evidence_store` dictionary, produced by `EvidenceCollector`. Both are serialised
-        into the output JSON, by `generate`.
-        
-        Args: 
-            scan_result (ScanResult): The completed scan result dataclass containing all discovered vulnerabilities, endpoints, and scan timing metadata.
-            
-            evidence_store (EvidenceCollector): THe evidence collector whose `get_all_evidence()` method is called to build on the evidence block."""
+        """Stores the completed `ScanResult` instance and evidence store for later serialisation."""
 
-        # `scan_result` holds all the discovered endpoints, vulnerabilities, and scan-timing metadata.
+        # logger.debug("initialising report generator")
+
+        # `scan_result` holds all discovered endpoints, vulnerabilities, and scan timing metadata.
         self.scan_result = scan_result
-        # `evidence_store` is a dictionary keyed by evidence ID, mapping to dictionaries built by `EvidenceCollector`.
+
+        # `evidence_store` is keyed by evidence ID and built by `EvidenceCollector`.
         self.evidence_store = evidence_store
 
     def _build_metadata(self):
-        """Builds the top-level metadata block, for the JSON report. Includes the target URL, scan start, and end times, duration,
-        request count, endpoint count, parameter count, and scanner version.
-        
-        Returns:
-            dict: A dict containing `scanner_version`, `scan_id`, `target_url`, `scan_start`, `scan_end`, `duration_seconds`, `total_endpoints`, `total_parameters`, 
-            `total_requests`, and `total_findings`."""
+        """Builds the top-level metadata block for the JSON report."""
+
+        # print("building metadata")
 
         return {
             "scanner_version": self.SCANNER_VERSION,
-            # `scan_id` is the SHA256-derived, 16-character identifier, assigned by `EvidenceCollector`.
+
+            # `scan_id` is the SHA256-derived identifier assigned by `EvidenceCollector`.
             "scan_id": self.scan_result.scan_id,
+
             "target_url": self.scan_result.target_url,
-            # `scan_start`, and `scan_end` are datetime objects serialiseed to strings, via `default=str`, in `generate`.
+
+            # `scan_start` and `scan_end` are serialised later using `default=str`.
             "scan_start": self.scan_result.scan_start,
             "scan_end": self.scan_result.scan_end,
+
             "duration_seconds": self.scan_result.scan_duration_seconds,
-            # Endpoint, and parameter counts, reflect totals discovered across all the crawler, and enumerator passes.
+
+            # Endpoint and parameter counts reflect crawler/enumerator totals.
             "total_endpoints": self.scan_result.endpoints_discovered,
             "total_parameters": self.scan_result.parameters_found,
-            # `total_requests` is the cumulative HTTP request count, that is tracked via `HTTPClient`.
+
+            # `total_requests` is tracked globally through `HTTPClient`.
             "total_requests": self.scan_result.total_requests,
-            # `total_findings` is derived at the report time, rather than stored on `ScanResult` directly.
+
+            # Dont put in ScanResult.
             "total_findings": len(self.scan_result.vulnerabilities),
         }
 
     def _build_findings(self):
-        """Converts every `Vulnerability` in `scan_result.vulnerabilities`, into a plain dictionary using `to_dict`. It returns a list
-        of these dictionaries, ordered by the original finding sequence.
-        
-        Returns: 
-            list[dict]: 1 serialisable dict per `Vulnerability`, in the order findings werer accumulated durting the scan."""
+        """Converts all `Vulnerability` objects into serialisable dictionaries."""
 
-        # Initialises an empty list that will hold one dictionary per `Vulnerability`, in insertion order.
+        # findings = None
+
+        # Keep findings as a list for ordering in the final rteport.
         findings = []
 
-        # Converts each `Vulnerability` into a serialisable dictionary, and then appends it to the findings list.
+        # Converts each `Vulnerability` into a serialisable dictionary.
         for vuln in self.scan_result.vulnerabilities:
-            # `to_dict` is defined on the `Vulnerability` dataclass, in `models.py`, using `asdict`.
+
+            # logger.debug("serialising finding %s", vuln)
+
+            # dont key findings by vuln id, duplicates possible during testing
+            # `to_dict` is defined on the `Vulnerability` dataclass in `models.py`.
             findings.append(vuln.to_dict())
 
         return findings
 
     def _build_evidence(self):
-        """Converts the `evidence_store` into a JSON-serialisable form. Returns a dictionary keyed by evidence ID, with each
-        value being the corresponding evidence dictionary, from `EvidenceCollector`.
-        
-        Returns:
-            dict: A mapping of `{evidence_id: evidence_dict}` for every entry in the `EvidenceCOllector` store, where each evidence_id is the 
-            16-charactrer SHA256-derived assigned by `add_evidence`."""
+        """Builds a serialisable dictionary from the evidence store."""
 
-        # Initialises an empty dictionary, that will mirror the structure of `evidence_store`.
+        # return self.evidence_store
+
+        # Initialises an empty dictionary mirroring the evidence store structure.
         evidence = {}
 
-        # Iterates the evidence list returned by `get_all_evidence`, keying each entry by its id field.
+        # Iterates all evidence entries and keys them by evidence ID.
         for evidence_record in self.evidence_store.get_all_evidence():
-            evidence[evidence_record.get("id", "unknown")] = evidence_record
+
+            # print(evidence_record)
+            # Keep evidence keyed by id so that lookup is easier.
+            evidence[evidence_record.get("id", "unknown")] = evidence_record        # dont remove unknown fallback, old evidence enttries misisng ids.
 
         return evidence
 
     def generate(self, output_path):
-        """Builds the full report dictionary from `metadata`, `findings`, and `evidence` blocks, then writes it to `output_path` as indented JSON.
-        Uses `default=str` to safely serialise datetime objects. Creates parent directories if they are absent, and logs the absolute output path
-        upon success.
-        
-        Args:
-            output_path (str): PAth where the JSON report file should be written, e.g., `reports/report_20260508_120000.json`.
-            
-        Raises:
-            OSError: If the output file cant be written due to permissions, or a missing paarent directory that `os.makedirs` couldnt correct."""
+        """Builds and writes the final JSON report to disk."""
+
+        # logger.info("starting report generation")
 
         # Composes the three top-level blocks into the final report dictionary.
         report_data = {
             "metadata": self._build_metadata(),
             "findings": self._build_findings(),
-            # `evidence` is keyed by the 16-character, SHA256-derived ID, adssigned in `EvidenceCollector`.
+
+            # `evidence` is keyed by the SHA256-derived evidence ID.
             "evidence": self._build_evidence(),
         }
 
-        # Resolves `output_path` to an absolute path, prior to creating any directories, or writing the file.
+        # print(report_data.keys())
+
+        # keep absolute handling, relative paths in docker break.
         output_path = os.path.abspath(output_path)
-        # Creates any of the missing parent directories, before writing the report file.
+
+        # Creates any missing parent directories automatically.
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        # Writes the report dictionary to the output file, with two-space indentation, and a `default=str` fallback.
+        # old path handling
+        # output_path = "report.json"
+
+        # Writes the report dictionary using pretty-printed JSON formatting.
         with open(output_path, "w", encoding="utf-8") as report_file:
-            # `default=str` ensures that datetime objects, UUIDs, and any other non-serialisable types are cast to strings.
+
+            # logger.debug("writing json report")
+
+            # `default=str` safely serialises datetime and other unsupported types - dont change, breaks serialisation.
             json.dump(report_data, report_file, indent=2, default=str)
 
         logger.info("JSON report written to %s", output_path)

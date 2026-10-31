@@ -13,7 +13,7 @@ import time
 import requests
 
 
-# Colours for the terminal output. Defines the ANSDI escape codes, as class attributes so they can be referenced inline in f-strings.
+# Makes results easier to read on terminal in a long scan.
 class C:
     GREEN = "\033[92m"
     YELLOW = "\033[93m"
@@ -24,7 +24,7 @@ class C:
     RESET = "\033[0m"
 
 
-# Shorthanded print helpers keyed by severity, and used throughout the launch sequence.
+# Shorthanded print helpers keyed by severity, and used throughout the launch sequence - easier and less time wasted.
 def ok(msg):
     print(f"{C.GREEN}[+]{C.RESET} {msg}")
 
@@ -47,17 +47,7 @@ def banner(msg):
 
 # Docker helpers.
 def _docker_run(args, capture=False):
-    """Runs a docker command, returning stdout string, or None on failure.
-
-    Args:
-        args (list[str]): The docker subcommand, and its arguments e.g., `['inspect', '-f', '{{.State.Running}}', 'juice-shop']`.
-
-        capture (bool): If `True`. returns the stripped stdout string from the command. If `False`, returns a bool indicating
-        whether the exit code was 0. Defaults to `False`.
-
-    Returns:
-        str or bool or None: THe stripped stdout string, when `capture` is True, or a bool when `capture` is `False`. Reutrns `None`
-        on exceptioon when `capture` is `True`, and `False` on exception when `capture` is `False`."""
+    """Runs a docker command, returning stdout string, or None on failure."""
 
     try:
         # Passes the docker subcommand list, directly to subprocess to avoid shell injection risks.
@@ -76,15 +66,9 @@ def _docker_run(args, capture=False):
         # Returns a type-consistent fallback, so tht callers dont need to handle NOne vs False separately.
         return None if capture else False
 
-
+# note - docker inspect returns the string "true" not boolean.
 def _container_running(name):
-    """Checks whether the named DOcker container is currently running by querying its live state, via `docker inspect`.
-
-    Args:
-        name (str): The docker container name to inspect, e.g., `'juice-shop'`.
-
-        Returns:
-            bool: `True`, if the container exists, and its running state is `true`. `False` if it is stopped, paused, or doesnt exist."""
+    """Checks whether the named DOcker container is currently running by querying its live state, via `docker inspect`. """
 
     #   Queries the containers live running state, using Dockers GO template format.
     out = _docker_run(["inspect", "-f", "{{.State.Running}}", name], capture=True)
@@ -105,20 +89,10 @@ def _container_exists(name):
     r = subprocess.run(["docker", "inspect", name], capture_output=True, text=True)
     return r.returncode == 0
 
-
+# dvwa web ui comes up before mysql is ready - lots of failed account inserts.
 def ensure_container(name, image, port_mapping):
-    """Ensures that the named container is running, starting, or creating if necessary. Tries 3 paths in order: already runbning, exists-but-stopped,
-    and create from image.
-
-    Args:
-        name (str): The docker container name e.g., `juice-shop`.
-
-        image (str): The Docker image tag to use if the container must be created, e.g., `'bkimminich/juice-shop:v17.1.1'`.
-
-        port-mapping (str): The host-to-container port mapping string, passed to `docker run -p`, e.g., `'3000:3000'`.
-
-    Returns:
-        bool: `True` if the container is running after this call, `False` if any docker command failed, and the container could not be started."""
+    """ Ensures that the named container is running, starting, or creating if necessary. Tries 3 paths in order: already runbning, exists-but-stopped,
+    and create from image. """
 
     # SKips all setup work immediately, if the container is already running.
     if _container_running(name):
@@ -134,17 +108,7 @@ def ensure_container(name, image, port_mapping):
 
 
 def wait_for_http(url, label, timeout=120):
-    """Polls `url` with GET requests ever 3 seconds, until a 200 response is returned, or the `timeout` deadline is reached.
-
-    Args"
-        url (str): The absolute URL to poll e.g., `http://localhost:3000`
-
-        label (str): HUman-readable target name used in log output, e.g., `Juice Shop`.
-
-        timeout (int): The maximum number of seconds to wait before giving up. Defualts to 120.
-
-    Returns:
-        bool: `True`, if a 200 response was received prior to deadline, `False` if the timeout expired without a successful response."""
+    """ Polls `url` with GET requests ever 3 seconds, until a 200 response is returned, or the `timeout` deadline is reached. """
 
     info(f"Waiting for {label} to be ready at {url} ...")
     # Records the absolute deadline, rather than counting down a loop iteration counter.
@@ -166,13 +130,7 @@ def wait_for_http(url, label, timeout=120):
 
 
 def wait_for_dvwa_mysql(timeout=90):
-    """Pollst he MYSQL instance inside the `dvwa` container, every 3 seconds, until the database is accessible, or the `timeout` deadline is reached.
-
-    Args:
-        timeout (int): Maximum number of seconds to wait before giving up. Defaults to 90.
-
-    Returns:
-        bool: `True` if `USE dvwa` executed successfully inside the container, `False` if the timeout expired before MYSQL became reachable."""
+    """Pollst he MYSQL instance inside the `dvwa` container, every 3 seconds, until the database is accessible, or the `timeout` deadline is reached. """
 
     info("Waiting for DVWA MySQL to be ready...")
     deadline = time.time() + timeout
@@ -202,24 +160,21 @@ def wait_for_dvwa_mysql(timeout=90):
     return False
 
 
-# ── Configuration state check ─────────────────────────────────────────────────
+# Configuration state check
 
-
+# Added so that repeated scan debugs dont have go through the whole setup each time
 def _check_configured():
     """Verifies that both containers are running, the Juice Shop admin account is
     accessible with the known password, and `user_a` exists in the DVWA database.
-    Used at startup to decide whether to skip the setup phases.
-
-    Returns:
-        bool: `True` if all 3 checks pass and setup can be skipped, `False` if any
-            check fails and the full setup sequence must run.
+    Used at startup to decide whether to skip the setup phases. 
     """
     # Both containers must be running before any HTTP or MySQL check is worth attempting.
     if not _container_running("juice-shop") or not _container_running("dvwa"):
         return False
 
-    # Confirms the Juice Shop admin account exists with the expected password.
+    # Confirms the Juice Shop admin account exists with the expected password - bypass method.
     try:
+        # js requires security question on registration, q id 1 works.
         r = requests.post(
             "http://localhost:3000/rest/user/login",
             json={"email": "admin@juice-sh.op", "password": "CHANGE_ME_ADMIN"},
@@ -341,14 +296,11 @@ def setup_juice_shop_accounts():
 
 # DVWA account setup.
 
-
+# IDs 6 and 7 are hardcoded - dont clash with existing dvwa users.
+# verify
 def setup_dvwa_accounts():
     """Inserts `user_a`, and `user_b` into the DVWA MySQL databse, using `docker exec`. Uses `INSERT IGNORE` so that the call is safe
-    to repeat on every run, without fialing on duplicate rows.
-
-    Returns:
-        bool: Always returns `True`. A non-zero exit code from MySQL is treated as a harmless duplicate, rather than a hard failure, and
-        a warning is logged."""
+    to repeat on every run, without fialing on duplicate rows. """
 
     info("Setting up DVWA test accounts...")
     # Uses INSET IGNORE, so that repeated runs dont fail on duplicate user_id, or username values.
@@ -400,11 +352,7 @@ MODULES = {
 
 
 def pick_target():
-    """Prompts the user to select a scan tareget from JS, DVWA, or both, and returns a list of `(namne, config_path)` tuples, for use by `run_scan`.
-
-    Returns:
-        list[tuple[str, str]]: A list of 1, or 2 tuples, each containing the tareget short nme e.g., `juiceshop`, and its YAML config path e.g.,
-        `configs/juiceshop.yaml`. Both targets are returned in JS-first order, when option 3 is selected."""
+    """Prompts the user to select a scan tareget from JS, DVWA, or both, and returns a list of `(namne, config_path)` tuples, for use by `run_scan`. """
 
     banner("─── Select Scan Target ───────────────────────────────")
     print("  1)  OWASP Juice Shop  (http://localhost:3000)")
@@ -451,11 +399,7 @@ def pick_scan_type():
 
 def pick_modules():
     """Presents the numbered modulke list, and prompts the user to enter a space-separated selection. Validates each entry, auto-prepends `crawl`
-    if missing, and returns a comma-separated token string.
-
-    Returns:
-        str: A comma-separated string of module tokens ready to pass `--modules`, e.g., `crawl,idor,vertical`. `crawl` is always included at the
-        first token, since all the test modules depend on its output."""
+    if missing, and returns a comma-separated token string. """
 
     banner("─── Select Modules ───────────────────────────────────")
     print("  Enter the numbers of the modules you want to run,")
@@ -488,11 +432,7 @@ def pick_modules():
 
 
 def pick_options():
-    """Prompts the user for optional scan flags: verbose logging, and a proxy URL.
-
-    Returns:
-        tuple[bool, str or None]: A 2-element tuple, where the first element is `True` if verbose logging was requested, and the
-        second is the proxy URL string e.g., `http://127.0.0.1:8080`, or `None` if no proxy was entered."""
+    """Prompts the user for optional scan flags: verbose logging, and a proxy URL. """
 
     banner("─── Additional Options ───────────────────────────────")
     # Treats any inpujt other than "y" as no, defaulting to non-verbose for cleaner output.
@@ -505,21 +445,10 @@ def pick_options():
     return verbose, proxy
 
 
-# Run the scanner.
+# Run the scanner - uses sys.executable so it picks up the venv python rather than whatever python3 resolves to.
 def run_scan(config_path, modules, verbose=False, proxy=None, output_dir="reports/"):
     """Builds and executes the `python -m scanner.main` command for a single target, inheriting the current terminal, so that the live
-    scanner output prints in real time.
-
-    Args:
-        config_path (str): Path to the target YAML config file, e.g., `configs/juiceshop.yaml`.
-
-        modules (str): The `--modules` value to pass, either `all`, or a comma-separated token string e.g., `crawl.idor`.
-
-        verbose (bool): If `True`, appends `--verbose` to the command so the scanner logs at `DEBUG` level. Defaults `False`.
-
-        proxy (str or None): A proxy URL to pass via `--proxy`, e.g., http://127.0.0.1:8080. Pass `NOne` to skip. Defaults to `NOne`.
-
-        output_dir (str): Directory where the HTML, and JSON reports are written. Defaults to `reports/`."""
+    scanner output prints in real time. """
 
     # Builds the command list, using `sys.executable`, so that the correct venv Python is always used.
     cmd = [
@@ -538,6 +467,9 @@ def run_scan(config_path, modules, verbose=False, proxy=None, output_dir="report
         cmd.append("--verbose")
     if proxy:
         cmd += ["--proxy", proxy]
+    # "--no-ssl-verify" intentionally omitted - dvwa uses plain http so not needed
+    # if no_ssl_verify:
+    #     cmd.append("--no-ssl-verify")
 
     banner(f"─── Running scan: {config_path} ─────────────────────")
     # Prints the full command, so that the user can repdouce, or modify it manually if needed.
@@ -572,7 +504,7 @@ def main():
         info("Environment not ready — running full setup.")
 
         # Step 1 docker setup.
-        banner("─── Step 1: Starting Docker containers ──────────────")
+        banner("---- Step 1: Starting Docker containers ------------------")
         # ENsures that both containers are running, before waiting for HTTP readiness.
         js_ok = ensure_container(
             "juice-shop", "bkimminich/juice-shop:v17.1.1", "3000:3000"
@@ -588,7 +520,7 @@ def main():
             sys.exit(1)
 
         # Step 2 wait for readiness.
-        banner("─── Step 2: Waiting for targets to be ready ─────────")
+        banner("---- Step 2: Waiting for targets to be ready ------------------")
         # Polls HTTP beforee attempting account setp, which would fail if the app hasnt finished booting.
         if not wait_for_http("http://localhost:3000", "Juice Shop"):
             err("Juice Shop did not start in time.")
@@ -599,13 +531,13 @@ def main():
             sys.exit(1)
 
         # Step 3 account setup.
-        banner("─── Step 3: Creating test accounts ──────────────────")
+        banner("---- Step 3: Creating test accounts ------------------")
         # Sets up both targets unconditionally, INSERT IGNORE, and password reset make both reusable.
         setup_juice_shop_accounts()
         setup_dvwa_accounts()
 
     # Step 4 interactive scan configuration.
-    banner("─── Step 4: Configure your scan ─────────────────────")
+    banner("---- Step 4: Configure your scan ------------------")
     targets = pick_target()
     modules = pick_scan_type()
     verbose, proxy = pick_options()
@@ -617,7 +549,7 @@ def main():
         os.makedirs(out_dir, exist_ok=True)
         run_scan(config_path, modules, verbose=verbose, proxy=proxy, output_dir=out_dir)
 
-    banner("─── All scans complete ───────────────────────────────")
+    banner("---- All scans complete ------------------")
 
     ok("Reports written to reports/")
 

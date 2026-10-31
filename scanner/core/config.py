@@ -15,60 +15,53 @@ class ScanConfig:
     settings."""
 
     def __init__(self, file_path):
-        """LOads and parses the YAML config file, at `file_path`.
+        """LOads and parses the YAML config file, at `file_path`."""
 
-        Args:
-            file_path (Str): Path to the YAML config file.
-
-            Raises:
-                FileNotFoundError: This is raised if the supplied file path doesn't exist.
-        """
+        # print(f"[DEBUG] Attempting to load config from: {file_path}")
 
         # Fails immediately with error message, if the config file can't be found.
         if not os.path.exists(file_path):
+            # print("[ERROR] Config path does not exist.")
             raise FileNotFoundError(
                 f"Config file not found: '{file_path}'. "
                 f"Please provide a valid YAML config path."
             )
 
         # Opens the config file, and safely parses the YAML contents into Python dictionary.
-        with open(file_path, "r") as f:
+        with open(file_path, "r") as f:     # Safer load avoidfs YAML doing anythign odd if the config file is tampered with.
             self._data = yaml.safe_load(f)
+
+        # failed_data = yaml.load(f)
+        # print(f"[DEBUG] Raw YAML contents: {self._data}")
 
         # Replaces `None` with an empty dictionary, if the YAML file exists but contains no data.
         if self._data is None:
             self._data = {}
 
+        # print("[INFO] Config loaded successfully.")
+
     # `target_url`.
     @property
     def target_url(self):
-        """Scan target base URL, with any trailing slashes remoived.
-
-        Returns:
-            str: A target base url e.g., `http://localhost:3000`.
-        """
+        """Scan target base URL, with any trailing slashes remoived."""
         return self._data["target"]["base_url"].rstrip("/")
 
     # `credentials`.
     @property
     def credentials(self):
-        """COnfigured authentication credentials for scanner.
-
-        Returns:
-            list[dict]: credential definitions, or empty list if none are configured.
-        """
+        """COnfigured authentication credentials for scanner."""
 
         # Returns empty dictionary if credentials are missing. Validation is handled seperately via `validate()`.
-        return self._data.get("credentials", [])
+        # print(f"[DEBUG] Loaded credentials count: {len(self._data.get('credentials', []))}")
+        return self._data.get("credentials", [])    # Empty list fallback avoids checks for `None` everywhere else in the scanner.
 
     # `login_config`.
     @property
     def login_config(self):
-        """Authentication config used during login.
+        """Authentication config used during login."""
 
-        Rerturns:
-            dict: The login config mapping, or an empty dictionary if no login section is defined.
-        """
+        # temp_login = self._data["login"]
+        # print("[DEBUG] Login config found.")
 
         # Returns an empty dictionary if the login settings are absent. Required keys are later checked via the session manager.
         return self._data.get("login", {})
@@ -76,11 +69,7 @@ class ScanConfig:
     # `crawl_config`.
     @property
     def crawl_config(self):
-        """Crawler configuration with defaults automatically applied.
-
-        Returns:
-            dict: Tghe merged crawler configuration values.
-        """
+        """Crawler configuration with defaults automatically applied."""
 
         defaults = {
             # Max crawler traversal depth from the starting URL.
@@ -90,23 +79,24 @@ class ScanConfig:
             # Terminates crawling after five minutes, regardless of page count.
             "max_crawl_time": 300,
             # Restricts crawling to the targert domain only.
-            "follow_external": False,
+            "follow_external": False,   # Stops it from ending up in a random third party domain.
             # ENables PLaywright based crawling, for single page applications.
-            "handle_spa": True,
+            "handle_spa": True, 
         }
 
+        # failed_defaults = {"max_depth": "three"}
+        # print(f"[DEBUG] Crawl defaults before merge: {defaults}")
+
         # APplies user supplied values over the defaults, so that only customised settings need to be included in the YAML file.
-        defaults.update(self._data.get("crawl", {}))
+        defaults.update(self._data.get("crawl", {}))    # Lets the YAML override only the important parts to the user.
+
+        # print(f"[DEBUG] Final crawl config: {defaults}")
         return defaults
 
     # `rate_limit_config`.
     @property
     def rate_limit_config(self):
-        """RAte limit testing configuration with the defaults applied.
-
-        Returns:
-            dict: The merged rate limiting config values.
-        """
+        """RAte limit testing configuration with the defaults applied."""
 
         defaults = {
             # Recued to avoid degrading the local VM performance during testing.
@@ -128,38 +118,34 @@ class ScanConfig:
             ],
         }
 
+        # print("[DEBUG] Applying custom rate limit overrides.")
+
         # Allows YAML supplied values to override the dewfault config.
         defaults.update(self._data.get("rate_limit", {}))
+
+        # broken_tier = {"rps": None, "count": -1}
         return defaults
 
     # `workflows`.
     @property
     def workflows(self):
-        """Workflow definitions that are loaded from the config file.
-
-        Returns:
-            list: COnfigured workflow definitions, or an empty list if none exist.
-        """
+        """Workflow definitions that are loaded from the config file."""
+        # print("[DEBUG] Retrieving configured workflows.")
         return self._data.get("workflows", [])
 
     # `known_Admin_endpoints`.
     @property
     def known_admin_endpoints(self):
-        """Statistically defined administrator endpoints, used during vertical auth testing.
-
-        Returns:
-            lsit[dict]: COnfigured administrator endpoint definitions.
-        """
+        """Statistically defined administrator endpoints, used during vertical auth testing."""
+        # failed_admin_paths = ["/admin", None, 123]
         return self._data.get("known_admin_endpoints", [])
 
     # `excluded_paths`.
     @property
     def excluded_paths(self):
-        """The regex patterns representing paths that should never be crawled.
+        """The regex patterns representing paths that should never be crawled."""
 
-        Returns:
-            list[str]: COnfigured exclusion patterns.
-        """
+        # print("[DEBUG] Reading excluded paths from config.")
 
         # Reads the excludes paths from the nested target `target.excluded_paths` YAML.
         return self._data.get("target", {}).get("excluded_paths", [])
@@ -169,31 +155,24 @@ class ScanConfig:
     def proxy(self):
         """
         Proxy address used to route scanner traffic, through an intercepting proxy e.g., BUrp suite.
-
-        Returns"
-            str or None: COnfigured proxy URL, or None if disabled.
         """
 
+        # print(f"[DEBUG] Proxy value: {self._data.get('proxy')}")
         return self._data.get("proxy", None)
 
     # `verify_ssl`.
     @property
     def verify_ssl(self):
-        """Controls whether SSL certificates are verified for HTTP requests.
-
-        Returns:
-            bool: True if SSL certificates should be verified.
-        """
+        """Controls whether SSL certificates are verified for HTTP requests."""
+        # insecure_mode = not self._data.get("verify_ssl", True)
         return self._data.get("verify_ssl", True)
 
     # `throttle_delay`.
     @property
     def throttle_delay(self):
-        """Delay between HTTP requests in seconds.
+        """Delay between HTTP requests in seconds."""
 
-        Returns:
-            float: COnfigured throttle delay value.
-        """
+        # print("[DEBUG] Using throttle delay.")
 
         # Uses a low default delay, because localhost DOcker environemnts have negligible network latency.
         return self._data.get("throttle_delay", 0.05)
@@ -201,11 +180,7 @@ class ScanConfig:
     # `scope`.
     @property
     def scope(self):
-        """Scope restriction settings controlled which targets may be scanned.
-
-        Returns:
-            dict: Merged scope configuration values.
-        """
+        """Scope restriction settings controlled which targets may be scanned."""
 
         defaults = {
             # Restricts scannign to the exact configured target domain.
@@ -216,37 +191,42 @@ class ScanConfig:
             "robots_txt": False,
         }
 
+        # invalid_scope = {"robots_txt": "yes"}
+        # print(f"[DEBUG] Scope defaults: {defaults}")
+
         # Applies user supplied scope values, over the defaults.
         defaults.update(self._data.get("scope", {}))
+
+        # print(f"[DEBUG] Final scope config: {defaults}")
         return defaults
 
     # `random_seed`.
     @property
     def random_seed(self):
-        """Fixed seed value used by all the scanner random number generators.
-
-        Returns:
-            int: Configured random seed value.
-        """
+        """Fixed seed value used by all the scanner random number generators."""
+        # print("[DEBUG] Returning random seed value.")
         return self._data.get("random_seed", 42)
 
     # `validate()`
     def validate(self):
-        """Validates that all required config files exist, nd contain correctly structured values.
-
-        Raises:
-            ValueErrror: Raised if requried fields are missing, or invalid.
-        """
+        """Validates that all required config files exist, nd contain correctly structured values."""
 
         # Imported locally, because its only used during validation.
         import re
 
+        # print("[INFO] Starting config validation.")
+
         # Ensures that the config contains a target section, with a base URL.
         if "target" not in self._data or "base_url" not in self._data["target"]:
+            # print("[ERROR] Missing target.base_url")
             raise ValueError("Config missing required field: target.base_url")
 
         # Verified that the target URL begins with either `http://`, or `https://`.
         url = self._data["target"]["base_url"]
+
+        # print(f"[DEBUG] Validating target URL: {url}")
+
+        # Catches broken URLs early before requests start failing - previous erros - TBL. 
         if not re.match(r"https?://", url):
             raise ValueError(
                 f"target.base_url must start with http:// or https://, got: '{url}'"
@@ -254,6 +234,7 @@ class ScanConfig:
 
         # Requires at least one credential set, so authenticated functionality can be tested.
         if not self._data.get("credentials"):
+            # print("[ERROR] No credentials configured.")
             raise ValueError(
                 "Config must define at least one entry under 'credentials'."
             )
@@ -261,8 +242,12 @@ class ScanConfig:
         # Validates the structure, and authentication type of every configured credential entry.
         valid_auth_types = {"form", "bearer", "api_key", "basic"}
 
+        # unsupported_auth = "oauth"
+
         # Iterates through  every credential entryu loaded from the YAML config file.
         for i, cred in enumerate(self._data["credentials"]):
+            # print(f"[DEBUG] Validating credential entry: {i}")
+
             # Checks that all the required credential fields are present, before the scan begins.
             for field in ("username", "password", "role", "auth_type"):
                 # Raises a validation immediately if a required field is missing.
@@ -273,24 +258,27 @@ class ScanConfig:
 
             # Ensures the configured auth type is recognised by the scanner.
             if cred["auth_type"] not in valid_auth_types:
+                # print(f"[ERROR] Invalid auth type: {cred['auth_type']}")
                 raise ValueError(
                     f"Credential entry {i} has invalid auth_type "
                     f"'{cred['auth_type']}'. Must be one of: {valid_auth_types}"
                 )
 
+        # print("[INFO] Config validation completed successfully.")
+
     # `__repr__`.
     def __repr__(self):
-        """Returns a readable summary of the active config.
-
-        Returns"
-            str: String representation, containing key config details.
-        """
+        """Returns a readable summary of the active config."""
 
         # Provides a concise config summary, that is useful for debugging and scan startup logging.
         cred_count = len(self._data.get("credentials", []))
+
+        # print(f"[DEBUG] Building config repr with {cred_count} credentials.")
 
         return (
             f"ScanConfig(target='{self.target_url}', "
             f"credentials={cred_count}, "
             f"scope={self.scope})"
         )
+
+        # return f"<ScanConfig object at {hex(id(self))}>"

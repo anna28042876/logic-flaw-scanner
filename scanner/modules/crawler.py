@@ -38,39 +38,26 @@ class Crawler:
         session_manager: SessionManager,
         scope_enforcer: ScopeEnforcer,
     ):
-        """Stores all 4 injected pipeline dependencies, and initialises the 3 shared data structures used across crawl methods.
-
-        Args:
-            config (ScanConfig): Scanner config providing crawl limits, target URL, and scope settings.
-
-            http_client (HTTPClient): Shared HTTP client for sending all crawl requests.
-
-            session_manager (SessionManager:) Provides per-role session kwargs, for authenticated crawl passes.
-
-            scope_enforcer(ScopeENforcer): Gates every discovered URL against the configured target host, and path prefix rules."""
 
         self.config = config
         self.http_client = http_client
         self.session_manager = session_manager
         self.scope_enforcer = scope_enforcer
-        # Consumed by IDOR, auth-bypass, and rate-limit probe modules.
+        # shared acreoss all crawl phases so that deduplication works right
         self.discovered_endpoints: list[Endpoint] = []
-        # Prevents re-crawling redirect loops and duplicates pages mid-session.
+        # resets between sessions in `crawl_all_session`, not here.
         self.visited_urls: set[str] = set()
         # Raw form metadata passe to auth-workflow and form-injection
         self.forms: list[dict] = []
         self.logger = get_logger(__name__)
 
+    # Overkill for some pages but handles malformed JS html better than alternatives.
     def _extract_links(self, html: str, base_url: str) -> list[str]:
         """Parses an HTML page with BeautifulSoup and returns every URL found across anchor, link, scrippt, image,
         and iframe tags. All relative paths are resolved to absolute URLs against `bare_url` so every entry entering the
-        BFS queue is ready for `ScopeEnforcer checking`.
-
-        Args:
-            html (str): The raw HTML response body to parse.
-            base_url (str): The absolute URL of the page being parsed, used as the base for resolving relative hrefs, and srcs."""
+        BFS queue is ready for `ScopeEnforcer checking`."""
         soup = BeautifulSoup(html, "lxml")
-        # Coverns anchors, stylesheets, scripts, images, and embedded frames.
+        # Anchors, stylesheets, scripts, images, and embedded frames.
         tag_attr_pairs = [
             ("a", "href"),
             ("link", "href"),
@@ -91,16 +78,7 @@ class Crawler:
     def _extract_forms(self, html: str, page_url: str) -> list[dict]:
         """Finds every <form> element on a page and returns it action URL, HTTP method, encoding type, and named fields as
         a dictionary. Action URLs are reesolved to absolute paths. The returned list feeds self.forms, which is then later
-        cvonsumed by the auth-workflow and form-injection modules.
-
-        Args:
-            html (Str): The raw HTML response body to parse.
-
-            page_url (str): Th absolute URL o the page, used to resolve relative form action apths.
-
-        Returns
-            list[dict]: 1 dict per form, each contaaining `action`, `method`, `enctype`, `fields` (list of `{'name', 'type', 'value'}` dicts)
-            , and `source_page`."""
+        cvonsumed by the auth-workflow and form-injection modules. """
 
         soup = BeautifulSoup(html, "lxml")
         forms = []
@@ -137,13 +115,14 @@ class Crawler:
             )
         return forms
 
+    # JS hides a lot of routes via inline scripts rather than anhor tags
     def _extract_api_hints(self, html: str, response_headers: dict) -> list[str]:
         """Mines four sources (inline script literals, raw HTML URLs RFC 5988 Link headers, and `data-url`/`data-api-endpoint` attributes)
         for REST API paths not reachable via the standard anchor tags. Results are deduplicated, filtered to remove static assets, and checked
         against `ScopeENforcer` before being returned. Primarily targets Juicee Shops Angular routes and DVWA widgets."""
 
         soup = BeautifulSoup(html, "lxml")
-        # Excludes static asset paths with carry no auth-surface, prior to deduplication.
+        # Dont care about static assets.
         false_positives = re.compile(
             r"^/(js|css|img|images|fonts|static|assets)/", re.IGNORECASE
         )
@@ -200,17 +179,7 @@ class Crawler:
         """Finds every linked `<script src>` on the target domain in `html`, fetches each bundle
         that has not already been visited, and extracts path-like string literals from the raw JS
         source. Returns deduplicated absolute URLs that pass `ScopeEnforcer`, so that API routes
-        embedded in SPA bundles reach the BFS queue without relaxing the configured scope.
-
-        Args:
-            html (str): The raw HTML response body, whose script tags are scanned.
-
-            base_url (str): The asbolute URL of the pge, used to resolve relative script src attributes.
-
-            session_kwargs (dict): Session credentials forwarded to `http_client.get`, for fetching JS bundles.
-
-        Returns:
-            list[str]: Deduplicated absolute URLs extracted from JS bundle source code, that pass `ScopeEnforcer.is_in_scope`."""
+        embedded in SPA bundles reach the BFS queue without relaxing the configured scope.  """
 
         soup = BeautifulSoup(html, "lxml")
         target_netloc = urlparse(self.config.target_url).netloc
@@ -274,7 +243,7 @@ class Crawler:
         crawled_count = 0
 
         # Main BFS loop.
-        # Dequeues URLs, applies guard checks, fetches, parses, and enqueues any discovered links.
+        # Dequeues URLs, applies guard checks, fetches, parses, and enqueues any discovered links -- should works as standard BFS.
         while queue:
             url, depth = queue.popleft()
 
@@ -337,7 +306,8 @@ class Crawler:
                 except (ValueError, TypeError):
                     # Malformed JSON from the target is not a scanner error, so it skips and continues.
                     pass
-
+            
+            # Reassuring to see if this moving during long JS scans
             if crawled_count % 20 == 0:
                 # Periuodic progress log to confirm that the crawl is actually running during long Juice Shop sessions.
                 self.logger.info(
@@ -345,6 +315,7 @@ class Crawler:
                     f"found {len(self.discovered_endpoints)} endpoints so far."
                 )
 
+    # JS returns nestyed json on some endpoints, with urls buried a few levels down.
     def _extract_json_urls(self, data, _depth: int = 0) -> list[str]:
         """Recursively walks a parsed JSON value and collects strings starting with '/' or 'http' as potential URL paths.
         Depth is capped at 10 to prevent stack exhaustion  or deeply nested Juice Shop API responses such as `/rest/products`
@@ -377,14 +348,7 @@ class Crawler:
     def _add_endpoint(self, url: str, method: str, role: str = None) -> None:
         """Registers a URL and HTTP method as an `Endpoint` in `discovered_endpoints`, deduplicating by (method, url)
         pairs so that the same route is never added twice. This prevents duplicate probing across the unauthenticated
-        and role-based crawl sessions that `crawl_all_sessions` manages.
-
-        Args:
-            url (str): The absolute URL of the endpoint to register.
-
-            method (str): The HTTP method, e.g., `GET`, `POST`.
-
-            role (str, optiuonal): The role under which this endpoint was discoverred. Not stored on the endpoint, used only for logging."""
+        and role-based crawl sessions that `crawl_all_sessions` manages. """
 
         key = (method.upper(), url)
         for ep in self.discovered_endpoints:
@@ -393,6 +357,7 @@ class Crawler:
                 return
         self.discovered_endpoints.append(Endpoint(url=url, method=method.upper()))
 
+    # Unauthenticated first, then once per role - diff between them flags auth-gated endpoints.
     def crawl_all_sessions(self) -> None:
         """Runs a full multi-session discovery pass. One unauthenticated crawl, followed by one crawl per configured role
         (e.g., 'user', 'admin' for Juice Shop). COmpares `discovered_endpoints` sets between passes using set diffs to

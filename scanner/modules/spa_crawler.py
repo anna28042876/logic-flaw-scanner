@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 
 
 class SPACrawler:
-    # Playwright-based crawler for Javascript-rendered SPAs.
+    # only used when `handle_spa` is true in congif - disabled it for JS on the kli vm.
 
     def __init__(self, config, session_manager, scope_enforcer):
         """Stores `config`, `session_manager`, and `scope_enforcer` for use across all crawl methods. Initialises `self.api_calls`, and
@@ -29,28 +29,23 @@ class SPACrawler:
         self.api_calls = []
         self.discovered_endpoints = []
 
+    # Just wires up the two event handlers, actual logic is in `_on_request` and `_on_response`
     def _setup_request_interceptor(self, page):
         """Registers `_on_request` and `_on_response` as Playwright event handlers on the given `page`, so that all outgoing and
-        incoming browser network traffic is captured during the crawl session.
-
-        Args:
-            page (playwright.sync_api.Page): The playwright page object on which to register the requst, and response event listeners."""
+        incoming browser network traffic is captured during the crawl session. """
 
         page.on("request", self._on_request)
         page.on("response", self._on_response)
 
     def _on_request(self, request):
         """Executed on every outgoing browser request. Logs any in-scope URLs and appends XHR, and Fetch calls (Juice Shop's Angular API traffic)
-        to `self.api_calls` as dictionaries containing url, method, headers, and post_data.
-
-        Args:
-            request (playwright.sync_api.Request): THe playwright request object, emitted byu tthe browser for each outgoing network call."""
+        to `self.api_calls` as dictionaries containing url, method, headers, and post_data."""
 
         url = request.url
         # Skips out-of-scope requests, and only processes URLs within the configured target domain.
         if self.scope_enforcer.is_in_scope(url):
             logger.debug(f"Intercepted request: {request.method} {url}")
-            # Captures only XHR and Fetch calls, ignoring static assets.
+            # Captures only XHR and Fetch calls, ignoring static assets - only care about the actual api calls themselves, not images or css etc.,
             if request.resource_type in ["xhr", "fetch"]:
                 self.api_calls.append(
                     {
@@ -75,18 +70,10 @@ class SPACrawler:
             content_type = response.headers.get("content-type", "unknown")
             logger.debug(f"API response: {response.status} {content_type} {url}")
 
+    # playwright wants cookies as a list of dicts rather than the simple name:value dict requests uses.
     def _convert_cookies_for_playwright(self, cookies_dict, target_url):
         """Converts the `{name: value}` cookies dictionary returned by `session_manager` into Playwright's required list-of-dictionaries format, using
-        the target domain and root path. Used for form-based auth targets such as DVWA.
-
-        Args:
-            cookies_dict (dict): Cookie name-to-value mapping, as returned by `SessionManager.get_cookies`.
-
-            target_url (str): THe absolute base URL of the target, used to extract the hostnames for each cookie entry.
-
-        Returns:
-            list[dict]: A list of Playwright cookie dicts, each containing `name`, `value`, `domain`, and `path`. Returns an empty list if `cookies_dict`
-            is empty, or `None`."""
+        the target domain and root path. Used for form-based auth targets such as DVWA."""
 
         # Returns early if no cookies were provided, which avoids unnecessary processing.
         if not cookies_dict:
@@ -103,7 +90,7 @@ class SPACrawler:
         DVWA form auth), clicks all safe interactive elements, and records unique SPA routes visited. Then populates `self.api_calls` and
         `self.discovered_endpoints`."""
 
-        # Destrucive action keywords whose matching elements are skipped to prevent irreversible state changes on JS or DVWA during discoveru.
+        # Destrucive action keywords whose matching elements are skipped to prevent irreversible state changes on JS or DVWA during discoveru -- dont accidentally delete a user or log out mid crawl.
         destructive_keywords = [
             "delete",
             "remove",
@@ -130,7 +117,7 @@ class SPACrawler:
                 session_kwargs = self.session_manager.get_session_kwargs(role)
                 auth_type = self.config.login_config.get("type", "form")
 
-                # Uses the Authorization header for Juice Shop bearer auth, instead of cookies.
+                # Uses the Authorization header for Juice Shop bearer auth, instead of cookies -  handle both.
                 if auth_type == "bearer":
                     token = session_kwargs.get("headers", {}).get("Authorization", "")
                     # Sets the Authorization header, only if a JWT token was successfully retrieved.
@@ -150,6 +137,7 @@ class SPACrawler:
 
             logger.info(f"Navigating to {target_url} as role={role!r}")
             try:
+                # network idle gives angular time to finsih rendering before clicking things.
                 page.goto(target_url, wait_until="networkidle", timeout=30000)
             except Exception as exc:
                 logger.warning(f"Initial navigation timed out or failed: {exc}")
@@ -157,7 +145,7 @@ class SPACrawler:
             # Records the landing route before any interactions with the elements begin.
             visited_routes.add(page.url)
 
-            # Queries all interactive elements: anchors, buttons, onclick attributes, 'role=button' elements, and navigation links.
+            # Queries all interactive elements: anchors, buttons, onclick attributes, 'role=button' elements, and navigation links - some JS routes only appear after interaction.
             elements = page.query_selector_all(
                 "a, button, [onclick], [role='button'], nav a, .nav-link"
             )
@@ -174,7 +162,7 @@ class SPACrawler:
                         logger.debug(f"Skipped destructive element: {text!r}")
                         continue
 
-                    # Skips any submit buttons to avoid sending POST form data during discovery.
+                    # Skips any submit buttons to avoid sending POST form data during discovery - so dont fire off ranbdom forms.
                     if element_type == "submit":
                         logger.debug(f"Skipped submit element: {text!r}")
                         continue
@@ -200,12 +188,10 @@ class SPACrawler:
 
         self.discovered_endpoints = self.get_api_endpoints()
 
+    # called by `main.py` after `crawl_with_browser` finishes to hand endpoints to the rest of the pipelin.
     def get_api_endpoints(self):
         """Converts each entry in `self.api_calls` into an `Endpoint` dataclass, and returns the full list. Called after `crawl_with_browser` to hand the discovered
-        Juice Shop API endpoints to the rest of the scanner pipeline.
-
-        Returns:
-        list[Endpoint]: 1 `Endpoint` per per captured XHR/Fetch call, with `url`, and `method` populated from the intercepted request data."""
+        Juice Shop API endpoints to the rest of the scanner pipeline. """
 
         endpoints = []
         # Converts each captured XHR/Fetch call dictionary into a typed `Endpoint` object.

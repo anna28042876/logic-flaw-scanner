@@ -49,21 +49,6 @@ class Scanner:
     def __init__(
         self, config_path, output_dir="reports/", modules="all", verbose=False
     ):
-        """Loads, and validates `ScanConfig`, configures the logger, and instantiates all the shared core components.
-        Parses the `modules` string into a set for `_should_run`, to query throughout the scan pipeline.
-
-        Args:
-            config_path (str): Path to the YAML confic for the target scan.
-
-            output_dir (str): Directory where HTML, and JSON report files are wrtiten, defaults to `reports/`.
-
-            modules (str): COmma-separated list of module tokens e.g., `crawl,idor,ratelimit`, or hte sentinel string `all` to run evrey module, defaults to `all`.
-
-            verbose (bool): If `TRue`, it sets the console log level to `DEBUG`, and defaults to `FALSE` (INFO level).
-
-        Raises:
-            FileNOtFoundError: if `config_path` doesn't exist.
-            ValueError: IF the YAML config fails `ScanConfig.validate()`."""
 
         # Loads the YAML config file, via `ScanConfig`, and immediately validates required fields.
         self.config = ScanConfig(config_path)
@@ -75,7 +60,10 @@ class Scanner:
         # Creates the shared `HTTPClient` with the loaded config file, so that all modules use the same session pool.
         self.http_client = HTTPClient(self.config)
         # Creates `SessionManager`, which will later call `authenticate_all()` to populate per-role sessions.
+
+
         self.session_manager = SessionManager(self.config, self.http_client)
+        # SCope enforcer needs to be config before http_client uses it 0 DONT CHANGE
         # Creates `ScopeEnforcer`, to gate every URL against the configured target domain, and exclusion lists.
         self.scope_enforcer = ScopeEnforcer(self.config)
         # Creates a shared `ResponseComparator` instance, passed to all modules that perform cross-role diffing.
@@ -91,9 +79,10 @@ class Scanner:
             self.modules = "all"
         else:
             self.modules = {m.strip().lower() for m in modules.split(",")}
+             
 
     def _print_banner(self):
-        """Prints an ASCII banner showing the scanner name, version, target URL, number of configured credential sets,
+        """Prints an ASCII banner showing the scanner name, version, target URL, number of configured credential  sets,
         and the UTC scan start timestamp."""
 
         # COunts the number of credential sets to display how many roles the scanner will authenticate.
@@ -106,6 +95,7 @@ class Scanner:
         )
 
         # Builds the full banner string, using f-string formatting with left-padded fields.
+        # easier to read - dont change messes up formatting
         banner = f"""
 |--------------------------------------------------------------|
 |          Logic Flaw Scanner  v{SCANNER_VERSION}              |            ║
@@ -151,12 +141,14 @@ class Scanner:
         )
 
         # Reads operator input, falling back to an empty string if stdin is non-interactive, which causes an abort.
+        # Dont barrage target
         try:
             confirmation = (
                 input("  Do you have authorisation to scan this target? [y/N]: ")
                 .strip()
                 .lower()
             )
+        # handles non interactive runs, piping config in and aborts cleanly,
         except EOFError:
             confirmation = ""
 
@@ -211,7 +203,7 @@ class Scanner:
                 )
 
         # Static Crawl. Initialises endpoint, and form lists here, so that downstream modules always have defined containers - even if crawling is skipped.
-        endpoints = []
+        endpoints = []      # Define here so later modules dont throw a fit
         forms = []
 
         if self._should_run("crawl"):
@@ -257,6 +249,7 @@ class Scanner:
                 )
 
         # SPA Crawl. Runs the PLaywright SPA crawler against JS's Angular frontend, and merges any newly discovered endpoints, when SPA handling is enabled.
+        # Diusables on JS - not available on kali anyways
         if self._should_run("crawl") and self.config.crawl_config.get(
             "handle_spa", True
         ):
@@ -670,6 +663,7 @@ class Scanner:
         )
 
         # Report Generation. Defensive programming - creates the output directory if it does not already exist before writing the reports.
+        # Reports/ doesnt exist first run.
         os.makedirs(self.output_dir, exist_ok=True)
 
         # Builds a timestamp string from the scan start time, to make each report filename unique per run.
@@ -767,7 +761,8 @@ def main():
         action="store_true",
         help="Enable DEBUG-level logging to the console and log file.",
     )
-    # Overrides the proxy field from the YAML config at runtime, which is useful for routing traffic through Burp Suite.
+    # Overrides the proxy field from the YAML config at runtime, which is useful for routing traffic through Burp Suite - can actually see what its syaing this time.
+    
     parser.add_argument(
         "--proxy",
         default=None,
