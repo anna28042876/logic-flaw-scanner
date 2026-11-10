@@ -217,6 +217,12 @@ credentials:
     role: "user_b"
     auth_type: "bearer"
 
+# The CHANGE_ME_* passwords are placeholders. launch.py creates the lab
+# accounts with these same values, so the lab works as is. To use your own,
+# change them consistently in configs/*.yaml and launch.py.
+# DVWA's admin/password and MySQL root password (vulnerables) are the
+# published defaults of the vulnerables/web-dvwa Docker image.
+
 rate_limit:
   requests_per_second: 10
   total_requests: 100
@@ -341,7 +347,8 @@ ruff format --check scanner/
 ## Ethical Use STatement:
 
 This tool is designed exclusively for the use against locally hosted, intentionally vulnerable applications (OWASP Juice SHop, and DVWA), within
-a controlled lab environment. 
+a controlled lab environment. The source code is published for transparency, education, and reproducibility, and must only be used against
+systems you own, or have explicit written permission to test. See `docs/responsible_disclosure.md` and `docs/dual_use_risk.md`.
 
 Scanning against any system without explicit, written authorisation from the systm owner is illegal under the Computer Misuse Act 1990 (UK) and equivalent
 legislation in other jurisdictions. The developer accepts no responsibility for misuse of this tool.

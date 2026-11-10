@@ -16,3 +16,6 @@ which would constitute an offence under the Computer Misuse Act 1990.
   network interfaces active during scans.
 - Docker targets (Juice Shop, DVWA) contain no real personal data.
 - credentials.txt excluded from version control via .gitignore.
+- Lab account passwords in configs/ and launch.py are placeholders.
+- Source is published openly; the README Ethical Use Statement and
+  docs/responsible_disclosure.md restrict use to authorised targets only.
